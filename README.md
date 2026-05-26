@@ -1,199 +1,208 @@
-# Infinite Context
+<p align="center">
+  <img src="docs/assets/infinite-context-logo.svg" alt="Infinite Context" width="760">
+</p>
 
-`infinitecontex` is a local-first project memory CLI for coding workflows. It captures a balanced view of the repo, current git state, runtime failures, and developer intent, then turns that into snapshots, handoff files, restore prompts, and inspectable memory history.
+<p align="center">
+  <strong>Local-first project memory for AI coding workflows.</strong>
+</p>
 
-Version: `0.3.0`
+<p align="center">
+  <a href="https://github.com/desenyon/infinitecontex/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/desenyon/infinitecontex/ci.yml?branch=main&label=ci&style=for-the-badge"></a>
+  <a href="https://pypi.org/project/infinitecontex/"><img alt="PyPI" src="https://img.shields.io/pypi/v/infinitecontex?style=for-the-badge&color=2563eb"></a>
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-111827?style=for-the-badge&logo=python&logoColor=white">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-10b981?style=for-the-badge"></a>
+  <img alt="CLI coverage" src="https://img.shields.io/badge/cli%20coverage-100%25-059669?style=for-the-badge">
+</p>
 
-## What Changed In 0.3.0
+<p align="center">
+  <a href="#quick-start">Quick Start</a>
+  <span> · </span>
+  <a href="#why-it-exists">Why It Exists</a>
+  <span> · </span>
+  <a href="#commands">Commands</a>
+  <span> · </span>
+  <a href="#documentation">Docs</a>
+</p>
 
-- Added snapshot history, snapshot inspection, and snapshot-to-snapshot diff workflows.
-- Added first-class pin management with `pins` and `unpin`.
-- Expanded `status` to report memory volume and latest capture timestamps.
-- Hardened restore and import integrity checks.
-- Updated the Python API and docs to match the larger memory-management surface.
+---
 
-## Install
+## What It Does
 
-Requirements:
+`infinitecontex` captures the working memory around a software project: repository structure, git state, diffs, runtime signals, decisions, active tasks, pinned files, and restore prompts. It stores that state locally in `.infctx/` so a developer or coding agent can recover context without rereading the whole repository from scratch.
 
-- Python `3.11+`
-- [uv](https://docs.astral.sh/uv/) recommended
+Current version: `0.3.1`
 
-### Install the CLI with `uv`
+```text
+repo + git + chat + intent
+        |
+        v
+  infctx snapshot
+        |
+        v
+.infctx memory store
+        |
+        +--> agent handoff files
+        +--> restore prompts
+        +--> searchable history
+        +--> snapshot diffs
+```
 
-Use `uv tool install` for a global CLI install:
+## Why It Exists
+
+Modern coding workflows lose context constantly: terminal output scrolls away, decisions live in chat, diffs only show the present moment, and agents often restart without the reasoning trail that got the project here. Infinite Context turns that working state into durable, inspectable memory.
+
+| Need | Infinite Context gives you |
+| --- | --- |
+| Resume work after an interruption | Snapshot history and restore prompts |
+| Hand off to another agent | Regenerated `.infctx/agents/*.md` files |
+| Understand what changed | Snapshot-to-snapshot comparisons |
+| Preserve decisions | `note`, `decisions`, and chat ingestion |
+| Keep important files visible | `pin`, `pins`, and `unpin` |
+| Stay local-first | SQLite and project files under `.infctx/` |
+
+## Quick Start
+
+Install the CLI:
 
 ```bash
 uv tool install infinitecontex
 infctx --version
 ```
 
-Upgrade later with:
-
-```bash
-uv tool upgrade infinitecontex
-```
-
-If the executable already exists locally, reinstall with:
-
-```bash
-uv tool install --force infinitecontex
-```
-
-### Run from source during development
-
-From the repository root:
+Run from source during development:
 
 ```bash
 uv sync --extra dev
-uv run infctx --version
 uv run infctx --help
 ```
 
-### One-off run without installing globally
+Initialize memory for a project:
 
 ```bash
-uv tool run --from infinitecontex infctx --version
+uv run infctx init
+uv run infctx snapshot --goal "stabilize the CLI release"
+uv run infctx status
 ```
 
-## Quick Start
-
-Run these commands from the repository root you want to snapshot.
+Work from outside the target repo:
 
 ```bash
-# Initialize once per repo
-uv run infctx init
+uv run infctx --project-root /path/to/repo snapshot --goal "continue current work"
+```
 
-# Optional: apply the included Python-oriented preset
-uv run infctx config --set-file config/default.json
+## Daily Workflow
 
-# Capture a one-off snapshot
-uv run infctx snapshot --goal "overhaul the CLI workflow"
+### 1. Capture The Current State
 
-# Review snapshot history and inspect the latest capture
-uv run infctx snapshots
-uv run infctx show-snapshot
+```bash
+uv run infctx snapshot --goal "ship the next release"
+```
 
-# Compare the latest two captures
-uv run infctx compare-snapshots
+This records a structured view of the project and refreshes the agent-facing files in `.infctx/agents/`.
 
-# Start a structured live session with an immediate snapshot
-uv run infctx session --goal "overhaul the CLI workflow"
+### 2. Review Memory
 
-# Inspect current state
+```bash
 uv run infctx status
+uv run infctx snapshots --limit 10
+uv run infctx show-snapshot
+```
 
-# Generate a handoff prompt
+Use these commands to inspect the latest goal, active tasks, pins, recent commits, and snapshot metadata.
+
+### 3. Compare Work Over Time
+
+```bash
+uv run infctx compare-snapshots
+```
+
+By default, this compares the latest two snapshots and highlights changed files, task changes, issue changes, and metric deltas.
+
+### 4. Generate A Handoff Prompt
+
+```bash
 uv run infctx prompt --mode generic-agent-restore --token-budget 1200
 ```
 
-If you are operating from outside the repo, pass `--project-root` explicitly:
+Use the generated prompt when you need a compact restore brief for another model, agent, or session.
+
+### 5. Run A Live Session
 
 ```bash
-uv run infctx config \
-  --project-root /path/to/repo \
-  --set-file config/default.json
+uv run infctx session --goal "refactor restore flow"
 ```
 
-## Primary Workflow
+`session` takes an immediate snapshot, watches filtered project changes, skips noisy `.infctx/` updates, and refreshes memory as work progresses.
 
-`infctx init`
+## Commands
 
-- Creates `.infctx/` and its local metadata store.
-- Safe to rerun.
+| Command | Purpose |
+| --- | --- |
+| `infctx init` | Create `.infctx/` and initialize local metadata |
+| `infctx snapshot` | Capture a one-off project memory snapshot |
+| `infctx session` | Start a live capture session |
+| `infctx watch` | Compatibility alias for `session` |
+| `infctx status` | Show latest memory state, pins, tasks, and commits |
+| `infctx snapshots` | List recent snapshots |
+| `infctx show-snapshot` | Inspect one snapshot in detail |
+| `infctx compare-snapshots` | Compare two captured memory states |
+| `infctx prompt` | Generate a compact restore prompt |
+| `infctx restore` | Validate restore state against a snapshot |
+| `infctx ingest-chat` | Ingest transcript-derived intent and decisions |
+| `infctx note` | Save an architectural or workflow decision |
+| `infctx decisions` | List recent decisions |
+| `infctx pin` / `pins` / `unpin` | Manage high-priority context files |
+| `infctx search` | Search local memory |
+| `infctx diff-summary` | Summarize current uncommitted changes |
+| `infctx config` | Read or apply project configuration |
+| `infctx doctor` | Run integrity and dependency diagnostics |
+| `infctx export` / `import` | Move local memory between machines |
+| `infctx cleanup` | Prune old snapshots and compact storage |
+| `infctx setup-agent` | Wire Cursor, Claude, Copilot, or Windsurf to `.infctx/agents/` |
 
-`infctx session`
+Global options:
 
-- Takes an immediate initial snapshot.
-- Watches filtered project changes.
-- Excludes noisy paths like `.infctx/`.
-- Shows recent changed files, last trigger, and skipped cooldown batches.
-
-`infctx snapshot`
-
-- Runs the same capture pipeline without entering live mode.
-
-`infctx snapshots`
-
-- Lists recent snapshots with their goal, branch, tracked file count, and active task count.
-- Useful for memory audits and selecting snapshots for inspection or restore.
-
-`infctx show-snapshot`
-
-- Displays the latest snapshot, or a specific one via `--snapshot-id`.
-- Includes snapshot metrics, tracked work state, and the generated prompt artifact path.
-
-`infctx compare-snapshots`
-
-- Diffs two snapshots across tracked files, active files, tasks, issues, and metrics.
-- Defaults to the latest snapshot compared against the immediately previous one.
-
-`infctx status`
-
-- Shows the latest snapshot, memory count, latest capture time, current goal, active tasks, open issues, pins, and recent commits.
-
-`infctx ingest-chat`
-
-- Ingests an exported transcript or auto-discovers local chat sources.
-- Stores inferred goals, decisions, tasks, issues, questions, and signal provenance.
-- `--file` is currently more reliable than `--auto`.
-
-`infctx watch`
-
-- Compatibility alias for `infctx session`.
-
-`infctx pins` and `infctx unpin`
-
-- Let you inspect pinned context with notes and remove stale pins without touching the database manually.
+```bash
+infctx --project-root /path/to/repo status
+infctx --version
+infctx --help
+```
 
 ## Generated State
 
-Snapshots and outputs are stored in `.infctx/`, including:
+Infinite Context keeps generated files inside `.infctx/`:
 
-- `.infctx/metadata/state.db`
-- `.infctx/snapshots/`
-- `.infctx/prompts/`
-- `.infctx/agents/`
-- `.infctx/working_set/`
-
-Every snapshot regenerates:
-
-- `.infctx/agents/overview.md`
-- `.infctx/agents/architecture.md`
-- `.infctx/agents/behavioral.md`
-- `.infctx/agents/decisions.md`
-- `.infctx/agents/recent_changes.md`
-- `.infctx/agents/instructions.md`
-
-## Recommended Usage
-
-For the best results:
-
-1. Start with an explicit goal.
-2. Ingest a real transcript with `ingest-chat --file` when available.
-3. Use `session` for live work and `snapshot` for one-off refreshes.
-4. Read the generated files in `.infctx/agents/` before trusting the restore prompt.
-
-Recommended order:
-
-```bash
-uv run infctx init
-uv run infctx ingest-chat --file /path/to/session.txt
-uv run infctx snapshot --goal "continue current work"
-uv run infctx snapshots
-uv run infctx compare-snapshots
-uv run infctx status
-uv run infctx prompt --mode generic-agent-restore --token-budget 1200
+```text
+.infctx/
+  agents/
+    architecture.md
+    behavioral.md
+    decisions.md
+    instructions.md
+    overview.md
+    recent_changes.md
+  metadata/
+    state.db
+  prompts/
+  snapshots/
+  working_set/
 ```
 
-## Snapshot Management
+The most useful files for agents are in `.infctx/agents/`. They are regenerated from snapshots and are safe to read before making changes.
 
-New in `0.3.0`, the app can now manage its captured memory directly:
+## Configuration
 
-- `uv run infctx snapshots --limit 10` to browse recent memory states.
-- `uv run infctx show-snapshot --snapshot-id snap-...` to inspect one snapshot deeply.
-- `uv run infctx compare-snapshots --from-snapshot snap-a --to-snapshot snap-b` to understand what changed between captures.
-- `uv run infctx pins` and `uv run infctx unpin --path path/to/file.py` to keep pinned context clean.
+Apply the included Python-oriented preset:
+
+```bash
+uv run infctx config --set-file config/default.json
+```
+
+The global root option works before the command:
+
+```bash
+uv run infctx --project-root /path/to/repo config --set-file config/default.json
+```
 
 ## Development
 
@@ -202,12 +211,34 @@ uv sync --extra dev
 uv run ruff check .
 uv run mypy src
 uv run pytest
+uv build
 ```
+
+The current local validation suite reports:
+
+- `78` tests passing
+- `95%` total coverage
+- `100%` coverage for `src/infinitecontex/cli.py`
 
 ## Documentation
 
-- `docs/overview.md`
-- `docs/architecture.md`
-- `docs/cli-reference.md`
-- `docs/config-reference.md`
-- `docs/troubleshooting.md`
+| Topic | File |
+| --- | --- |
+| Product overview | [docs/overview.md](docs/overview.md) |
+| Architecture | [docs/architecture.md](docs/architecture.md) |
+| CLI reference | [docs/cli-reference.md](docs/cli-reference.md) |
+| CLI behavior contract | [docs/cli-behavior-contract.md](docs/cli-behavior-contract.md) |
+| Configuration | [docs/config-reference.md](docs/config-reference.md) |
+| Data model | [docs/data-model-reference.md](docs/data-model-reference.md) |
+| Restore pipeline | [docs/restore-pipeline.md](docs/restore-pipeline.md) |
+| Security and privacy | [docs/security-privacy.md](docs/security-privacy.md) |
+| Testing strategy | [docs/testing-strategy.md](docs/testing-strategy.md) |
+| Troubleshooting | [docs/troubleshooting.md](docs/troubleshooting.md) |
+
+## Release Notes
+
+See [CHANGELOG.md](CHANGELOG.md) for release history. The `0.3.1` release adds the global `--project-root` option, removes stale external packaging, simplifies CI, and expands CLI coverage.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
