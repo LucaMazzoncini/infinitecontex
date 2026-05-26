@@ -4,6 +4,7 @@ Global:
 
 - `infctx --version`
 - `infctx --help`
+- `infctx --project-root PATH COMMAND ...`
 
 Structured workflow:
 
