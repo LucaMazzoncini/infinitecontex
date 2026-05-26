@@ -23,13 +23,17 @@ from infinitecontex.version import __version__
 
 app = typer.Typer(help="Infinite Context: local-first project memory engine", invoke_without_command=True)
 console = Console()
+_global_project_root: Path | None = None
 
 
 @app.callback()
 def main(
     ctx: typer.Context,
     version: Annotated[bool, typer.Option("--version", help="Show version and exit")] = False,
+    project_root: Annotated[Path | None, typer.Option("--project-root", help="Project root for commands")] = None,
 ) -> None:
+    global _global_project_root
+    _global_project_root = project_root
     if version:
         console.print(f"infinitecontex {__version__}")
         raise typer.Exit(0)
@@ -38,8 +42,12 @@ def main(
         raise typer.Exit(0)
 
 
+def _effective_project_root(project_root: Path | None) -> Path:
+    return (project_root or _global_project_root or Path.cwd()).resolve()
+
+
 def _service(project_root: Path | None) -> InfiniteContextService:
-    return InfiniteContextService((project_root or Path.cwd()).resolve())
+    return InfiniteContextService(_effective_project_root(project_root))
 
 
 def _print_error(message: str) -> None:
@@ -512,7 +520,7 @@ def setup_agent(
     project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
 ) -> None:
     """Wire IDE AI agents directly to Infinite Context memory."""
-    root = (project_root or Path.cwd()).resolve()
+    root = _effective_project_root(project_root)
     content = (
         "You are operating in a project managed by Infinite Context.\n"
         "To reliably understand the state of this repository, you MUST ALWAYS start by reading:\n"
@@ -638,8 +646,7 @@ def ingest_chat(
         out = svc.ingest_chat_payload({key: context.get(key) for key in [*persistable_keys, "source_text"]})
         _emit(out, json, "ingest_chat")
     else:
-        if chat_file is None:
-            raise typer.Exit(1)
+        assert chat_file is not None
         _run_action(
             lambda: svc.ingest_chat(chat_file),
             as_json=json,
@@ -725,10 +732,11 @@ def config(
     json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     svc = _service(project_root)
+    root = _effective_project_root(project_root)
     if set_file:
         resolved_set_file = set_file
-        if not resolved_set_file.is_absolute() and project_root is not None:
-            candidate = (project_root / resolved_set_file).resolve()
+        if not resolved_set_file.is_absolute():
+            candidate = (root / resolved_set_file).resolve()
             if candidate.exists():
                 resolved_set_file = candidate
         try:
@@ -756,7 +764,7 @@ def session(
     json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     svc = _service(project_root)
-    root = (project_root or Path.cwd()).resolve()
+    root = _effective_project_root(project_root)
     cfg = load_app_config(root)
     svc.init()
 
