@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.1] - 2026-05-26
+
+### Changed
+
+- Added a global `--project-root` option for CLI commands.
+- Removed the stale external package-manager formula.
+- Simplified CI to use the default Python runtime instead of a version matrix.
+- Expanded CLI test coverage.
+
 ## [0.3.0] - 2026-04-22
 
 ### Added
