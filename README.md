@@ -9,9 +9,9 @@
 <p align="center">
   <a href="https://github.com/desenyon/infinitecontex/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/desenyon/infinitecontex/ci.yml?branch=main&label=ci&style=for-the-badge"></a>
   <a href="https://pypi.org/project/infinitecontex/"><img alt="PyPI" src="https://img.shields.io/pypi/v/infinitecontex?style=for-the-badge&color=2563eb"></a>
+  <a href="https://github.com/desenyon/infinitecontex/releases"><img alt="Release" src="https://img.shields.io/github/v/release/desenyon/infinitecontex?style=for-the-badge&color=0f766e"></a>
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-111827?style=for-the-badge&logo=python&logoColor=white">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-10b981?style=for-the-badge"></a>
-  <img alt="CLI coverage" src="https://img.shields.io/badge/cli%20coverage-100%25-059669?style=for-the-badge">
 </p>
 
 <p align="center">
@@ -26,11 +26,19 @@
 
 ---
 
+<p align="center">
+  <img src="docs/assets/infinite-context-cli-preview.svg" alt="A terminal preview of Infinite Context status output" width="860">
+</p>
+
 ## What It Does
 
 `infinitecontex` captures the working memory around a software project: repository structure, git state, diffs, runtime signals, decisions, active tasks, pinned files, and restore prompts. It stores that state locally in `.infctx/` so a developer or coding agent can recover context without rereading the whole repository from scratch.
 
 Current version: `0.3.1`
+
+| Local memory | Agent handoff | Snapshot diffing | Restore prompts |
+| --- | --- | --- | --- |
+| SQLite and project files under `.infctx/` | Regenerated Markdown briefs for coding agents | Compare goals, files, tasks, issues, and metrics | Compact prompts for resuming work |
 
 ```text
 repo + git + chat + intent
@@ -214,11 +222,12 @@ uv run pytest
 uv build
 ```
 
-The current local validation suite reports:
+Current local QC:
 
 - `78` tests passing
 - `95%` total coverage
 - `100%` coverage for `src/infinitecontex/cli.py`
+- `uv build` produces the wheel and source archive
 
 ## Documentation
 

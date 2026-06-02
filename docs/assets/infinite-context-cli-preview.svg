@@ -1,0 +1,51 @@
+<svg width="960" height="520" viewBox="0 0 960 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Infinite Context CLI preview</title>
+  <desc id="desc">A terminal-style preview of the Infinite Context status dashboard.</desc>
+  <defs>
+    <linearGradient id="chrome" x1="80" y1="40" x2="880" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="96" y1="94" x2="864" y2="94" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10B981"/>
+      <stop offset="0.5" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+    <filter id="shadow" x="40" y="16" width="880" height="488" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#020617" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <rect width="960" height="520" rx="36" fill="#F8FAFC"/>
+  <g filter="url(#shadow)">
+    <rect x="80" y="48" width="800" height="424" rx="24" fill="url(#chrome)"/>
+    <rect x="80" y="48" width="800" height="58" rx="24" fill="#1F2937"/>
+    <rect x="80" y="82" width="800" height="24" fill="#1F2937"/>
+    <circle cx="118" cy="78" r="7" fill="#F87171"/>
+    <circle cx="142" cy="78" r="7" fill="#FBBF24"/>
+    <circle cx="166" cy="78" r="7" fill="#34D399"/>
+    <rect x="96" y="106" width="768" height="3" fill="url(#accent)"/>
+
+    <text x="112" y="143" fill="#93C5FD" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" font-weight="700">$ infctx status</text>
+    <text x="112" y="184" fill="#E5E7EB" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">Infinite Context Dashboard</text>
+
+    <rect x="112" y="210" width="320" height="110" rx="14" fill="#111827" stroke="#334155"/>
+    <text x="132" y="242" fill="#5EEAD4" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" font-weight="700">Overview</text>
+    <text x="132" y="270" fill="#CBD5E1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">Branch: main</text>
+    <text x="132" y="295" fill="#CBD5E1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">Memory: snap-20260601</text>
+
+    <rect x="456" y="210" width="184" height="110" rx="14" fill="#0F1F1A" stroke="#10B981"/>
+    <text x="476" y="242" fill="#6EE7B7" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" font-weight="700">Active Tasks</text>
+    <text x="476" y="270" fill="#D1FAE5" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">3 tracked</text>
+    <text x="476" y="295" fill="#A7F3D0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">handoff ready</text>
+
+    <rect x="664" y="210" width="200" height="110" rx="14" fill="#111827" stroke="#2563EB"/>
+    <text x="684" y="242" fill="#93C5FD" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" font-weight="700">Pinned Context</text>
+    <text x="684" y="270" fill="#DBEAFE" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">README.md</text>
+    <text x="684" y="295" fill="#BFDBFE" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">src/cli.py</text>
+
+    <rect x="112" y="344" width="752" height="76" rx="14" fill="#0B1220" stroke="#334155"/>
+    <text x="132" y="378" fill="#F8FAFC" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15">Generated: .infctx/agents/overview.md, restore prompt, searchable snapshot history</text>
+    <text x="132" y="403" fill="#94A3B8" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15">Local SQLite memory. No external service required.</text>
+  </g>
+</svg>
