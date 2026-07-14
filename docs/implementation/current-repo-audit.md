@@ -1,5 +1,9 @@
 # Current Repository Audit
 
+## M2 E4 additive runtime update
+
+The repository now includes `context_admission/`, which reuses the persisted profile store, context estimator/calculator, manifest store, and Ollama client abstraction. It adds no second client and no repository retrieval. `chat` is the sole integrated model-call path and is now fail-closed through an immutable admitted payload. The roadmap's broad runtime specification mentions later tool execution; this slice deliberately implements only chat admission because editing, autonomous tools, retrieval, and task execution remain explicitly out of scope.
+
 Audit date: 2026-07-14
 
 ## Repository identity and state

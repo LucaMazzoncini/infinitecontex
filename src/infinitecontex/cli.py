@@ -16,6 +16,7 @@ from rich.spinner import Spinner
 from rich.table import Table
 from watchfiles import Change, watch
 
+from infinitecontex.context_admission.gate import ContextAdmissionGate
 from infinitecontex.context_budget.calculator import ContextBudgetCalculator
 from infinitecontex.context_budget.estimation import ConservativeTextEstimator, Utf8ByteUpperBoundEstimator
 from infinitecontex.context_budget.models import ContextSectionCategory, ContextSectionInput
@@ -39,12 +40,14 @@ profile_app = typer.Typer(help="Create and inspect digest-bound model profiles")
 budget_app = typer.Typer(help="Inspect deterministic context budgets")
 context_app = typer.Typer(help="Rank and pack explicit context candidates")
 manifest_app = typer.Typer(help="Inspect persisted context manifests")
+admission_app = typer.Typer(help="Inspect compact context admission records")
 ESTIMATE_TEXT_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 CONTEXT_CANDIDATE_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 model_app.add_typer(profile_app, name="profile")
 model_app.add_typer(budget_app, name="budget")
 app.add_typer(model_app, name="model")
 context_app.add_typer(manifest_app, name="manifest")
+context_app.add_typer(admission_app, name="admission")
 app.add_typer(context_app, name="context")
 console = Console()
 _global_project_root: Path | None = None
@@ -102,6 +105,54 @@ def _context_packing_service(project_root: Path | None) -> ContextPackingService
         ContextBudgetCalculator(cfg.context_budget.warning_threshold_basis_points),
         manifest_store=ContextManifestStore(layout.context_manifests),
     )
+
+
+def _context_admission_gate(project_root: Path | None) -> ContextAdmissionGate:
+    from infinitecontex.context_admission.store import AdmissionRecordStore
+
+    layout = build_layout(_effective_project_root(project_root))
+    return ContextAdmissionGate(
+        ModelProfileStore(layout.model_profiles),
+        ContextManifestStore(layout.context_manifests),
+        AdmissionRecordStore(layout.context_admissions),
+    )
+
+
+@context_app.command("admit")
+def context_admit(
+    request_file: Annotated[Path, typer.Option("--request-file", help="UTF-8 admission request JSON")],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    allow_large_file: Annotated[bool, typer.Option("--allow-large-file")] = False,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Evaluate a frozen request offline; never dispatch to Ollama."""
+    from infinitecontex.context_admission.models import AdmissionRequest
+
+    data = request_file.read_bytes()
+    if len(data) > CONTEXT_CANDIDATE_FILE_LIMIT_BYTES and not allow_large_file:
+        raise ValueError("admission request exceeds the safe 8 MiB limit; pass --allow-large-file explicitly")
+    request = AdmissionRequest.model_validate(orjson.loads(data))
+    result = _context_admission_gate(project_root).evaluate(request)
+    _emit(result.model_dump(mode="json"), json, "context_admission")
+
+
+@admission_app.command("list")
+def context_admission_list(
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    records = _context_admission_gate(project_root).record_store.list_records()
+    _emit([item.model_dump(mode="json") for item in records], json, "context_admissions")
+
+
+@admission_app.command("show")
+def context_admission_show(
+    admission_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    record = _context_admission_gate(project_root).record_store.load(admission_id)
+    _emit(record.model_dump(mode="json"), json, "context_admission_record")
 
 
 @context_app.command("pack")
@@ -393,12 +444,40 @@ def chat(
     root = _effective_project_root(project_root)
     cfg = load_app_config(root)
     client = OllamaClient(cfg.llm.base_url, timeout=cfg.llm.request_timeout_seconds)
+    installed = client.list_models()
     selected = model or cfg.llm.model
     if selected == "auto":
-        selected = recommend_model([item.name for item in client.list_models()])
+        selected = recommend_model([item.name for item in installed])
+    installed_model = next((item for item in installed if item.name.casefold() == selected.casefold()), None)
+    if installed_model is None or not installed_model.digest:
+        _print_error("The selected installed model needs a verified digest. Run `infctx setup` and retry.")
+        raise typer.Exit(3)
+    from infinitecontex.context_admission.dispatch import GatedChatDispatcher
+    from infinitecontex.context_admission.gate import ContextAdmissionGate
+    from infinitecontex.context_admission.store import AdmissionRecordStore
+
+    layout = build_layout(root)
+    profile_store = ModelProfileStore(layout.model_profiles)
+    profile = profile_store.find_exact("ollama", selected, installed_model.digest)
+    manifest_store = ContextManifestStore(layout.context_manifests)
+    packing_service = ContextPackingService(
+        profile_store,
+        ContextBudgetCalculator(cfg.context_budget.warning_threshold_basis_points),
+        manifest_store=manifest_store,
+    )
+    dispatcher = GatedChatDispatcher(
+        ContextAdmissionGate(
+            profile_store,
+            manifest_store,
+            AdmissionRecordStore(layout.context_admissions),
+        ),
+        client,
+    )
     application = ChatApplication(
         root,
-        client,
+        dispatcher,
+        packing_service,
+        profile,
         selected,
         max_turns=cfg.chat.recent_turns,
         auto_snapshot=cfg.chat.auto_snapshot and not no_snapshot,
@@ -480,7 +559,7 @@ def _format_dict(d: dict[str, object], title: str) -> Panel:
 
 def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
     if as_json:
-        console.print(orjson.dumps(payload, option=orjson.OPT_INDENT_2).decode())
+        console.print(orjson.dumps(payload, option=orjson.OPT_INDENT_2).decode(), markup=False, soft_wrap=True)
         return
 
     if isinstance(payload, str):

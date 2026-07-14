@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-
-import orjson
 
 from infinitecontex.context_budget.calculator import ContextBudgetCalculator
 from infinitecontex.context_budget.estimation import ConservativeTextEstimator, estimator_for_strategy
 from infinitecontex.context_budget.models import ContextSectionCategory, ContextSectionInput
 from infinitecontex.context_budget.service import ContextBudgetService
+from infinitecontex.context_packing.fingerprints import fingerprint_payload, manifest_fingerprint_payload
 from infinitecontex.context_packing.models import (
     CandidateCategory,
     ContextCandidate,
@@ -183,28 +181,26 @@ class ContextPackingService:
             "mandatory_exempt": True,
             "optional_bulk_category_cap_basis_points": self.policy.optional_bulk_category_cap_basis_points,
         }
-        fingerprint_payload = {
-            "schema_version": 1,
-            "ranking_policy": self.policy.model_dump(mode="json"),
-            "estimator_strategy": estimator.strategy_name,
-            "estimator_version": estimator_version,
-            "profile_id": profile.profile_id,
-            "model": {
-                "provider": profile.model_identity.provider,
-                "normalized_model_name": profile.model_identity.normalized_model_name,
-                "digest": profile.model_identity.model_digest,
-            },
-            "operational_context_tokens": profile.operational_context_tokens,
-            "maximum_recommended_input_tokens": budget.maximum_recommended_input_tokens,
-            "caller_reserved_input_tokens": caller_reserved_input_tokens,
-            "available_pack_tokens": available,
-            "safeguards": safeguards,
-            "included": [item.model_dump(mode="json") for item in included],
-            "excluded": [item.model_dump(mode="json") for item in exclusions],
-            "decision": decision,
-            "token_deficit": deficit,
-        }
-        fingerprint = hashlib.sha256(orjson.dumps(fingerprint_payload, option=orjson.OPT_SORT_KEYS)).hexdigest()
+        fingerprint = fingerprint_payload(
+            manifest_fingerprint_payload(
+                policy=self.policy,
+                estimator_strategy=estimator.strategy_name,
+                estimator_version=estimator_version,
+                profile_id=profile.profile_id,
+                provider=profile.model_identity.provider,
+                normalized_model_name=profile.model_identity.normalized_model_name,
+                digest=profile.model_identity.model_digest,
+                operational_context_tokens=profile.operational_context_tokens,
+                maximum_recommended_input_tokens=budget.maximum_recommended_input_tokens,
+                caller_reserved_input_tokens=caller_reserved_input_tokens,
+                available_pack_tokens=available,
+                safeguards=safeguards,
+                included=[item.model_dump(mode="json") for item in included],
+                excluded=[item.model_dump(mode="json") for item in exclusions],
+                decision=decision,
+                token_deficit=deficit,
+            )
+        )
         manifest = ContextManifest(
             manifest_id=f"context-manifest-{fingerprint[:24]}",
             manifest_fingerprint=fingerprint,

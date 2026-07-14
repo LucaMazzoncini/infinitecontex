@@ -160,7 +160,7 @@ infctx context pack --model qwen3.6:35b --candidate-file .\candidates.json
 infctx context manifest list
 ```
 
-The resulting `.infctx/context-manifests/` record is inspection-only: it explains every inclusion, exclusion, duplicate, token cost, and remaining budget without changing live chat behavior.
+The resulting `.infctx/context-manifests/` record explains every inclusion, exclusion, duplicate, token cost, and remaining budget. `infctx chat` now revalidates such a manifest and the exact frozen outbound request through a fail-closed admission gate before streaming; compact results are stored in `.infctx/context-admissions/`.
 
 | Command | Purpose |
 | --- | --- |

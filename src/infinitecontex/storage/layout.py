@@ -25,6 +25,7 @@ class InfctxLayout:
     exports: Path
     model_profiles: Path
     context_manifests: Path
+    context_admissions: Path
 
 
 def build_layout(project_root: Path) -> InfctxLayout:
@@ -45,6 +46,7 @@ def build_layout(project_root: Path) -> InfctxLayout:
         exports=base / "exports",
         model_profiles=base / "model-profiles",
         context_manifests=base / "context-manifests",
+        context_admissions=base / "context-admissions",
     )
 
 
