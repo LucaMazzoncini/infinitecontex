@@ -37,8 +37,7 @@ def compile_packet(snapshot: Snapshot, budget: int) -> ContextPacket:
         *[f"- {p}" for p in _truncate_lines(snapshot.structural.key_files, 20)],
         "Key file insights:",
         *[
-            f"- {insight.path}: {insight.summary}"
-            + (f" ({', '.join(insight.symbols[:4])})" if insight.symbols else "")
+            f"- {insight.path}: {insight.summary}" + (f" ({', '.join(insight.symbols[:4])})" if insight.symbols else "")
             for insight in snapshot.structural.file_insights[:10]
         ],
         "Config files:",

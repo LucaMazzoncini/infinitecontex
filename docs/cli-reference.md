@@ -13,6 +13,8 @@ Structured workflow:
 - `infctx model profile list [--project-root PATH] [--json]`
 - `infctx model profile show MODEL [--digest DIGEST] [--project-root PATH] [--json]`
 - `infctx model profile create MODEL [--project-root PATH] [--json]`
+- `infctx model budget show MODEL [--digest DIGEST] [--project-root PATH] [--json]`
+- `infctx model budget estimate MODEL (--text TEXT | --text-file PATH) [--digest DIGEST] [--output-tokens INT] [--tool-result-tokens INT] [--project-root PATH] [--json]`
 - `infctx init [--project-root PATH] [--json]`
 - `infctx session [--goal TEXT] [--project-root PATH] [--debounce-ms INT] [--min-interval-sec INT] [--once] [--json]`
 - `infctx watch [--goal TEXT] [--project-root PATH] [--debounce-ms INT] [--min-interval-sec INT]`
@@ -51,6 +53,8 @@ Notes:
 - `/context` reports only bounded-history state for now; the deterministic context-budget governor is not implemented until M2.
 - Model profile creation inspects an already installed Ollama model and writes an uncalibrated conservative profile. It does not download or benchmark models.
 - Profile lookup is digest-specific. `show` requires `--digest` when multiple builds of the same model name are persisted.
+- Budget commands use only persisted verified profiles and never contact Ollama. Results are deterministic inspection decisions; runtime model-call enforcement is not implemented yet.
+- Text estimation normalizes line endings and conservatively counts normalized UTF-8 bytes. Supply measured counts through the Python service when exact tokenizer results are available.
 - `session` is the preferred live workflow command.
 - `watch` is a compatibility alias for `session`.
 - `session --json` is supported only together with `--once`.

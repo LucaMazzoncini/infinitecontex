@@ -30,6 +30,10 @@ class ChatConfig(BaseModel):
     stream: bool = True
 
 
+class ContextBudgetConfig(BaseModel):
+    warning_threshold_basis_points: int = Field(default=8750, ge=1, le=10000)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -62,6 +66,7 @@ class AppConfig(BaseModel):
     policies: RuntimePolicies = Field(default_factory=RuntimePolicies)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     chat: ChatConfig = Field(default_factory=ChatConfig)
+    context_budget: ContextBudgetConfig = Field(default_factory=ContextBudgetConfig)
 
 
 @dataclass(frozen=True)

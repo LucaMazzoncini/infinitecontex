@@ -16,6 +16,10 @@ from rich.spinner import Spinner
 from rich.table import Table
 from watchfiles import Change, watch
 
+from infinitecontex.context_budget.calculator import ContextBudgetCalculator
+from infinitecontex.context_budget.estimation import ConservativeTextEstimator
+from infinitecontex.context_budget.models import ContextSectionCategory, ContextSectionInput
+from infinitecontex.context_budget.service import ContextBudgetService
 from infinitecontex.core.config import AppConfig, load_app_config
 from infinitecontex.core.models import PromptMode
 from infinitecontex.llm.ollama import OllamaClient
@@ -29,7 +33,9 @@ from infinitecontex.version import __version__
 app = typer.Typer(help="Infinite Context: local-first project memory engine", invoke_without_command=True)
 model_app = typer.Typer(help="Inspect local model configuration")
 profile_app = typer.Typer(help="Create and inspect digest-bound model profiles")
+budget_app = typer.Typer(help="Inspect deterministic context budgets")
 model_app.add_typer(profile_app, name="profile")
+model_app.add_typer(budget_app, name="budget")
 app.add_typer(model_app, name="model")
 console = Console()
 _global_project_root: Path | None = None
@@ -68,6 +74,75 @@ def _model_profile_service(project_root: Path | None) -> ModelProfileService:
     )
 
 
+def _context_budget_service(project_root: Path | None) -> ContextBudgetService:
+    root = _effective_project_root(project_root)
+    cfg = load_app_config(root)
+    return ContextBudgetService(
+        ModelProfileStore(build_layout(root).model_profiles),
+        ConservativeTextEstimator(),
+        ContextBudgetCalculator(cfg.context_budget.warning_threshold_basis_points),
+    )
+
+
+@budget_app.command("show")
+def model_budget_show(
+    model: Annotated[str, typer.Argument()],
+    digest: Annotated[str | None, typer.Option("--digest")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show fixed reserves and available input using a persisted exact profile."""
+    service = _context_budget_service(project_root)
+    result = _run_action(lambda: service.calculate(model, [], digest=digest), emit=False)
+    if hasattr(result, "model_dump"):
+        _emit(result.model_dump(mode="json"), json, "model_budget")
+
+
+@budget_app.command("estimate")
+def model_budget_estimate(
+    model: Annotated[str, typer.Argument()],
+    text: Annotated[str | None, typer.Option("--text", help="Text to estimate")] = None,
+    text_file: Annotated[Path | None, typer.Option("--text-file", help="UTF-8 text file to estimate")] = None,
+    digest: Annotated[str | None, typer.Option("--digest")] = None,
+    output_tokens: Annotated[int | None, typer.Option("--output-tokens", min=0)] = None,
+    tool_result_tokens: Annotated[int | None, typer.Option("--tool-result-tokens", min=0)] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Estimate supplied text against a persisted model profile without contacting Ollama."""
+    if (text is None) == (text_file is None):
+        _print_error("Provide exactly one of `--text` or `--text-file`.")
+        raise typer.Exit(2)
+    try:
+        if text is not None:
+            content = text
+        else:
+            assert text_file is not None
+            content = text_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        _print_error(f"Could not read `{text_file}` as UTF-8: {exc}. Fix the file and retry.")
+        raise typer.Exit(2) from exc
+    section = ContextSectionInput(
+        name="input",
+        category=ContextSectionCategory.CURRENT_USER_REQUEST,
+        text=content,
+        mandatory=True,
+    )
+    service = _context_budget_service(project_root)
+    result = _run_action(
+        lambda: service.calculate(
+            model,
+            [section],
+            digest=digest,
+            requested_output_tokens=output_tokens,
+            requested_tool_result_tokens=tool_result_tokens,
+        ),
+        emit=False,
+    )
+    if hasattr(result, "model_dump"):
+        _emit(result.model_dump(mode="json"), json, "model_budget")
+
+
 @profile_app.command("list")
 def model_profile_list(
     project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
@@ -89,7 +164,9 @@ def model_profile_show(
 ) -> None:
     """Show a persisted profile; require a digest when multiple builds exist."""
     from infinitecontex.model_profiles.errors import ModelProfileNotFoundError
+
     service = _model_profile_service(project_root)
+
     def resolve_profile() -> object:
         if digest is not None:
             return service.store.find_exact("ollama", model, digest)
@@ -297,9 +374,7 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
             pin_text = "\n".join(f"• {p}" for p in pins) if pins else "[dim]No active pins.[/dim]"
             commit_text = "\n".join(f"• {c}" for c in commits) if commits else "[dim]No recent commits.[/dim]"
             task_text = (
-                "\n".join(f"• {item}" for item in active_tasks)
-                if active_tasks
-                else "[dim]No active tasks.[/dim]"
+                "\n".join(f"• {item}" for item in active_tasks) if active_tasks else "[dim]No active tasks.[/dim]"
             )
             issue_text = "\n".join(f"• {item}" for item in unresolved) if unresolved else "[dim]No open issues.[/dim]"
 
@@ -365,6 +440,24 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                 "created": payload.get("created", ""),
             }
             console.print(_format_dict(summary, "Model Profile"))
+        elif format_type == "model_budget":
+            reserves = payload.get("fixed_reserves", {})
+            identity = payload.get("model_identity", {})
+            summary = {
+                "model": identity.get("model_name", "") if isinstance(identity, dict) else "",
+                "digest": identity.get("model_digest", "") if isinstance(identity, dict) else "",
+                "operational_context_tokens": payload.get("operational_context_tokens", ""),
+                "fixed_reserves": reserves.get("total_tokens", "") if isinstance(reserves, dict) else "",
+                "maximum_recommended_input_tokens": payload.get("maximum_recommended_input_tokens", ""),
+                "proposed_input_tokens": payload.get("total_proposed_input_tokens", ""),
+                "remaining_input_tokens": payload.get("remaining_input_tokens", ""),
+                "utilization_basis_points": payload.get("utilization_basis_points", ""),
+                "decision": payload.get("decision", ""),
+                "estimation_confidence": payload.get("estimation_confidence", ""),
+                "enforcement": payload.get("enforcement", ""),
+                "warnings": payload.get("warnings", []),
+            }
+            console.print(_format_dict(summary, "Context Budget"))
         elif format_type == "ingest_chat":
             summary = {
                 "developer_goal": payload.get("developer_goal", ""),
@@ -560,8 +653,7 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
             else:
                 for idx, item in enumerate(payload):
                     title_str = (
-                        f"[bold cyan]Result {idx + 1}[/bold cyan] | "
-                        f"{item.get('source', '')} - {item.get('key', '')}"
+                        f"[bold cyan]Result {idx + 1}[/bold cyan] | {item.get('source', '')} - {item.get('key', '')}"
                     )
                     p = Panel(
                         item.get("snippet", ""),
@@ -652,10 +744,14 @@ def compare_snapshots(
     json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     _run_action(
-        lambda: _service(project_root).compare_snapshots(
-            from_snapshot_id=from_snapshot,
-            to_snapshot_id=to_snapshot,
-        ).model_dump(mode="json"),
+        lambda: (
+            _service(project_root)
+            .compare_snapshots(
+                from_snapshot_id=from_snapshot,
+                to_snapshot_id=to_snapshot,
+            )
+            .model_dump(mode="json")
+        ),
         as_json=json,
         format_type="snapshot_compare",
     )

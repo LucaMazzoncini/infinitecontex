@@ -75,9 +75,7 @@ def test_cli_setup_check_only_json_uses_injected_ollama(tmp_repo: Path, monkeypa
     assert not (tmp_repo / ".infctx").exists()
 
 
-def test_cli_model_profile_create_list_and_show_human_and_json(
-    tmp_repo: Path, monkeypatch: MonkeyPatch
-) -> None:
+def test_cli_model_profile_create_list_and_show_human_and_json(tmp_repo: Path, monkeypatch: MonkeyPatch) -> None:
     from infinitecontex.llm.models import InstalledModel, ModelDetails
 
     class FakeOllama:
@@ -151,9 +149,7 @@ def test_cli_session_once_creates_initial_snapshot(tmp_repo: Path) -> None:
     assert '"goal": "ship release"' in result.stdout
 
 
-def test_cli_ingest_chat_auto_indexes_discovered_text(
-    tmp_repo: Path, monkeypatch: MonkeyPatch
-) -> None:
+def test_cli_ingest_chat_auto_indexes_discovered_text(tmp_repo: Path, monkeypatch: MonkeyPatch) -> None:
     runner = CliRunner()
     init_result = runner.invoke(app, ["init", "--project-root", str(tmp_repo)])
     assert init_result.exit_code == 0
@@ -183,9 +179,7 @@ def test_cli_ingest_chat_auto_indexes_discovered_text(
     assert "overhaul search" in search_result.stdout.lower()
 
 
-def test_cli_config_resolves_set_file_from_project_root(
-    tmp_repo: Path, monkeypatch: MonkeyPatch
-) -> None:
+def test_cli_config_resolves_set_file_from_project_root(tmp_repo: Path, monkeypatch: MonkeyPatch) -> None:
     runner = CliRunner()
     (tmp_repo / "config").mkdir()
     (tmp_repo / "config" / "default.json").write_text('{"capture_max_files": 42}', encoding="utf-8")
@@ -605,9 +599,7 @@ def test_cli_session_live_handles_change_batches(tmp_repo: Path, monkeypatch: Mo
     assert result.exit_code == 0
 
 
-def test_cli_session_live_handles_cooldown_and_snapshot_failure(
-    tmp_repo: Path, monkeypatch: MonkeyPatch
-) -> None:
+def test_cli_session_live_handles_cooldown_and_snapshot_failure(tmp_repo: Path, monkeypatch: MonkeyPatch) -> None:
     runner = CliRunner()
 
     def fake_watch(_root: Path, debounce: int) -> list[set[tuple[Change, str]]]:

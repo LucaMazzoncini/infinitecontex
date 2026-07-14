@@ -37,7 +37,7 @@ def normalize_model_name(name: str) -> str:
 
 
 class ModelIdentity(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     provider: str = Field(min_length=1)
     model_name: str = Field(min_length=1)
@@ -55,7 +55,7 @@ class ModelIdentity(BaseModel):
         if self.normalized_model_name != normalize_model_name(self.model_name):
             raise ValueError("normalized_model_name does not match model_name")
         digest = self.model_digest.strip() if self.model_digest else None
-        self.model_digest = digest
+        object.__setattr__(self, "model_digest", digest)
         expected = IdentityStrength.VERIFIED if digest else IdentityStrength.WEAK
         if self.identity_strength != expected:
             raise ValueError("identity_strength must be verified only when a digest is present")
