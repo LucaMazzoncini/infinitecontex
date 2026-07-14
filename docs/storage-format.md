@@ -14,5 +14,6 @@ Primary state root: `.infctx/`
 - `working_set/`: terminal and intent state.
 - `prompts/*.md`: compiled prompt outputs.
 - `exports/*.tgz`: portable exports.
+- `model-profiles/*.json`: schema-versioned, digest-bound model identities and conservative operational budgets. Files are deterministically serialized and atomically replaced.
 
 Export format: gzip tarball containing only `.infctx/`, allowing direct import on another machine.

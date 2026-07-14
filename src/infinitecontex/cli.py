@@ -5,7 +5,7 @@ from __future__ import annotations
 import fnmatch
 import time
 from pathlib import Path
-from typing import Annotated, Callable
+from typing import Annotated, Callable, cast
 
 import orjson
 import typer
@@ -18,10 +18,19 @@ from watchfiles import Change, watch
 
 from infinitecontex.core.config import AppConfig, load_app_config
 from infinitecontex.core.models import PromptMode
+from infinitecontex.llm.ollama import OllamaClient
+from infinitecontex.model_profiles.models import ModelProfile
+from infinitecontex.model_profiles.service import ModelProfileService
+from infinitecontex.model_profiles.store import ModelProfileStore
 from infinitecontex.service import InfiniteContextService
+from infinitecontex.storage.layout import build_layout
 from infinitecontex.version import __version__
 
 app = typer.Typer(help="Infinite Context: local-first project memory engine", invoke_without_command=True)
+model_app = typer.Typer(help="Inspect local model configuration")
+profile_app = typer.Typer(help="Create and inspect digest-bound model profiles")
+model_app.add_typer(profile_app, name="profile")
+app.add_typer(model_app, name="model")
 console = Console()
 _global_project_root: Path | None = None
 
@@ -48,6 +57,124 @@ def _effective_project_root(project_root: Path | None) -> Path:
 
 def _service(project_root: Path | None) -> InfiniteContextService:
     return InfiniteContextService(_effective_project_root(project_root))
+
+
+def _model_profile_service(project_root: Path | None) -> ModelProfileService:
+    root = _effective_project_root(project_root)
+    cfg = load_app_config(root)
+    return ModelProfileService(
+        OllamaClient(cfg.llm.base_url, timeout=cfg.llm.request_timeout_seconds),
+        ModelProfileStore(build_layout(root).model_profiles),
+    )
+
+
+@profile_app.command("list")
+def model_profile_list(
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List persisted model profiles without contacting Ollama."""
+    service = _model_profile_service(project_root)
+    profiles = _run_action(service.store.list_profiles, emit=False)
+    payload = [profile.model_dump(mode="json") for profile in cast(list[ModelProfile], profiles)]
+    _emit(payload, json, "model_profiles")
+
+
+@profile_app.command("show")
+def model_profile_show(
+    model: Annotated[str, typer.Argument()],
+    digest: Annotated[str | None, typer.Option("--digest")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show a persisted profile; require a digest when multiple builds exist."""
+    from infinitecontex.model_profiles.errors import ModelProfileNotFoundError
+    service = _model_profile_service(project_root)
+    def resolve_profile() -> object:
+        if digest is not None:
+            return service.store.find_exact("ollama", model, digest)
+        matches = service.store.find_by_name("ollama", model)
+        if not matches:
+            raise ModelProfileNotFoundError(f"No persisted profile exists for ollama/{model}")
+        if len(matches) > 1:
+            raise ModelProfileNotFoundError(
+                f"Multiple builds exist for {model}; rerun with --digest and the exact model digest"
+            )
+        return matches[0]
+
+    profile = _run_action(resolve_profile, emit=False)
+    if hasattr(profile, "model_dump"):
+        _emit(profile.model_dump(mode="json"), json, "model_profile")
+
+
+@profile_app.command("create")
+def model_profile_create(
+    model: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Inspect an installed model and persist an uncalibrated conservative profile."""
+    service = _model_profile_service(project_root)
+    result = _run_action(lambda: service.create_or_reuse(model), emit=False)
+    profile, created = cast(tuple[ModelProfile, bool], result)
+    payload = profile.model_dump(mode="json")
+    payload["created"] = created
+    _emit(payload, json, "model_profile")
+
+
+@app.command()
+def setup(
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    check_only: Annotated[bool, typer.Option("--check-only", help="Inspect without writing")] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="Accept safe local configuration writes")] = False,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Check local readiness and add safe Ollama/chat configuration."""
+    from infinitecontex.setup.service import SetupService
+
+    root = _effective_project_root(project_root)
+    allow_write = yes
+    if not check_only and not yes and not json:
+        allow_write = typer.confirm("Initialize or update additive .infctx configuration?", default=True)
+    cfg = load_app_config(root)
+    client = OllamaClient(cfg.llm.base_url, timeout=cfg.llm.request_timeout_seconds)
+    report = _run_action(
+        lambda: SetupService(root, client).run(check_only=check_only, allow_config_write=allow_write),
+        emit=False,
+    )
+    if hasattr(report, "model_dump"):
+        _emit(report.model_dump(mode="json"), json, "setup")
+
+
+@app.command()
+def chat(
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    model: Annotated[str | None, typer.Option("--model", help="Override configured Ollama model")] = None,
+    no_snapshot: Annotated[bool, typer.Option("--no-snapshot")] = False,
+) -> None:
+    """Start the first read-only streaming Ollama chat."""
+    from infinitecontex.chat.application import ChatApplication
+    from infinitecontex.chat.terminal import run_terminal
+    from infinitecontex.setup.service import recommend_model
+
+    root = _effective_project_root(project_root)
+    cfg = load_app_config(root)
+    client = OllamaClient(cfg.llm.base_url, timeout=cfg.llm.request_timeout_seconds)
+    selected = model or cfg.llm.model
+    if selected == "auto":
+        selected = recommend_model([item.name for item in client.list_models()])
+    application = ChatApplication(
+        root,
+        client,
+        selected,
+        max_turns=cfg.chat.recent_turns,
+        auto_snapshot=cfg.chat.auto_snapshot and not no_snapshot,
+    )
+    try:
+        run_terminal(application, console)
+    except Exception as exc:
+        _print_error(f"Chat failed: {exc}. Check Ollama with `infctx setup --check-only`.")
+        raise typer.Exit(3) from exc
 
 
 def _print_error(message: str) -> None:
@@ -224,6 +351,20 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
             )
         elif format_type == "config":
             console.print(_format_dict(payload, "Configuration"))
+        elif format_type == "model_profile":
+            identity = payload.get("model_identity", {})
+            summary = {
+                "profile_id": payload.get("profile_id", ""),
+                "model": identity.get("model_name", "") if isinstance(identity, dict) else "",
+                "digest": identity.get("model_digest", "unverified") if isinstance(identity, dict) else "",
+                "identity": identity.get("identity_strength", "") if isinstance(identity, dict) else "",
+                "configured_context_tokens": payload.get("configured_context_tokens", ""),
+                "operational_context_tokens": payload.get("operational_context_tokens", ""),
+                "maximum_recommended_input_tokens": payload.get("maximum_recommended_input_tokens", ""),
+                "calibration": payload.get("calibration_status", ""),
+                "created": payload.get("created", ""),
+            }
+            console.print(_format_dict(summary, "Model Profile"))
         elif format_type == "ingest_chat":
             summary = {
                 "developer_goal": payload.get("developer_goal", ""),
@@ -428,6 +569,26 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                         border_style="magenta",
                     )
                     console.print(p)
+        elif format_type == "model_profiles":
+            if not payload:
+                console.print("[dim]No model profiles found.[/dim]")
+            else:
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("Model")
+                table.add_column("Digest")
+                table.add_column("Identity")
+                table.add_column("Operational", justify="right")
+                table.add_column("Calibration")
+                for item in payload:
+                    identity = item.get("model_identity", {})
+                    table.add_row(
+                        str(identity.get("model_name", "")),
+                        str(identity.get("model_digest") or "unverified"),
+                        str(identity.get("identity_strength", "")),
+                        str(item.get("operational_context_tokens", "")),
+                        str(item.get("calibration_status", "")),
+                    )
+                console.print(Panel(table, title="[bold]Model Profiles[/bold]", expand=False))
         else:
             for item in payload:
                 console.print(item)

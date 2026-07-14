@@ -10,12 +10,29 @@ from pathlib import Path
 from typing import Any, cast
 
 import orjson
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from infinitecontex.core.policies import RuntimePolicies
 
 
+class LLMConfig(BaseModel):
+    provider: str = "ollama"
+    base_url: str = "http://localhost:11434"
+    model: str = "auto"
+    fallback_models: list[str] = Field(default_factory=lambda: ["qwen3-coder:30b"])
+    keep_alive: str = "10m"
+    request_timeout_seconds: float = 900.0
+
+
+class ChatConfig(BaseModel):
+    auto_snapshot: bool = True
+    recent_turns: int = Field(default=6, ge=1, le=50)
+    stream: bool = True
+
+
 class AppConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     project_name: str = ""
     capture_max_files: int = 1500
     include_patterns: list[str] = Field(default_factory=lambda: ["**/*.py", "**/*.md", "pyproject.toml"])
@@ -43,6 +60,8 @@ class AppConfig(BaseModel):
         ]
     )
     policies: RuntimePolicies = Field(default_factory=RuntimePolicies)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    chat: ChatConfig = Field(default_factory=ChatConfig)
 
 
 @dataclass(frozen=True)

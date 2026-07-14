@@ -23,6 +23,7 @@ class InfctxLayout:
     working_set: Path
     prompts: Path
     exports: Path
+    model_profiles: Path
 
 
 def build_layout(project_root: Path) -> InfctxLayout:
@@ -41,6 +42,7 @@ def build_layout(project_root: Path) -> InfctxLayout:
         working_set=base / "working_set",
         prompts=base / "prompts",
         exports=base / "exports",
+        model_profiles=base / "model-profiles",
     )
 
 

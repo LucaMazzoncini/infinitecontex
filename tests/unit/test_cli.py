@@ -24,6 +24,94 @@ def test_cli_init_and_status(tmp_repo: Path) -> None:
     assert "project_root" in result2.stdout
 
 
+def test_cli_preserves_established_commands_and_adds_first_slice() -> None:
+    result = CliRunner().invoke(app, ["--help"])
+    assert result.exit_code == 0
+    for command in [
+        "init",
+        "snapshot",
+        "session",
+        "status",
+        "prompt",
+        "restore",
+        "search",
+        "pin",
+        "note",
+        "doctor",
+        "config",
+        "setup-agent",
+        "setup",
+        "chat",
+    ]:
+        assert command in result.stdout
+
+
+def test_cli_setup_check_only_json_uses_injected_ollama(tmp_repo: Path, monkeypatch: MonkeyPatch) -> None:
+    from infinitecontex.llm.models import InstalledModel, ProviderHealth
+
+    class FakeOllama:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            assert base_url == "http://localhost:11434"
+            assert timeout == 900.0
+
+        def health(self) -> ProviderHealth:
+            return ProviderHealth(available=True, version="test")
+
+        def list_models(self) -> list[InstalledModel]:
+            return [InstalledModel(name="qwen3.6:35b", digest="sha256:test")]
+
+        def show_model(self, name: str) -> object:
+            from infinitecontex.llm.models import ModelDetails
+
+            return ModelDetails(name=name, parameters="num_ctx 32768")
+
+    monkeypatch.setattr(cli_module, "OllamaClient", FakeOllama)
+    result = CliRunner().invoke(
+        app,
+        ["setup", "--check-only", "--json", "--project-root", str(tmp_repo)],
+    )
+    assert result.exit_code == 0
+    assert '"recommended_model": "qwen3.6:35b"' in result.stdout
+    assert not (tmp_repo / ".infctx").exists()
+
+
+def test_cli_model_profile_create_list_and_show_human_and_json(
+    tmp_repo: Path, monkeypatch: MonkeyPatch
+) -> None:
+    from infinitecontex.llm.models import InstalledModel, ModelDetails
+
+    class FakeOllama:
+        def __init__(self, base_url: str, timeout: float) -> None:
+            pass
+
+        def list_models(self) -> list[InstalledModel]:
+            return [InstalledModel(name="demo:latest", digest="sha256:demo", details={"family": "demo"})]
+
+        def show_model(self, name: str) -> ModelDetails:
+            return ModelDetails(name=name, parameters="num_ctx 16384")
+
+    monkeypatch.setattr(cli_module, "OllamaClient", FakeOllama)
+    runner = CliRunner()
+    created = runner.invoke(
+        app,
+        ["model", "profile", "create", "demo:latest", "--project-root", str(tmp_repo), "--json"],
+    )
+    assert created.exit_code == 0
+    assert '"model_digest": "sha256:demo"' in created.stdout
+    assert '"calibration_status": "uncalibrated"' in created.stdout
+
+    listed = runner.invoke(app, ["model", "profile", "list", "--project-root", str(tmp_repo)])
+    assert listed.exit_code == 0
+    assert "demo:latest" in listed.stdout
+
+    shown = runner.invoke(
+        app,
+        ["model", "profile", "show", "demo:latest", "--project-root", str(tmp_repo), "--json"],
+    )
+    assert shown.exit_code == 0
+    assert '"schema_version": 1' in shown.stdout
+
+
 def test_cli_accepts_project_root_as_global_option(tmp_repo: Path) -> None:
     runner = CliRunner()
 
