@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "candidates": [
+    {
+      "candidate_id": "task-contract",
+      "category": "current_task",
+      "label": "Current task",
+      "content": "Add deterministic context packing without runtime enforcement.",
+      "mandatory": true,
+      "retention_priority": 100
+    },
+    {
+      "candidate_id": "target-source",
+      "category": "source_code_excerpt",
+      "label": "Target source excerpt",
+      "content": "def pack(candidates): return sorted(candidates)",
+      "source_path": "src/example.py",
+      "line_start": 1,
+      "line_end": 1,
+      "direct_request_match": true,
+      "retention_priority": 80
+    },
+    {
+      "candidate_id": "supporting-doc",
+      "category": "repository_documentation",
+      "label": "Supporting documentation",
+      "content": "Packing is deterministic and inspection-only."
+    }
+  ]
+}

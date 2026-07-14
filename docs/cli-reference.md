@@ -16,6 +16,9 @@ Structured workflow:
 - `infctx model budget show MODEL [--digest DIGEST] [--project-root PATH] [--json]`
 - `infctx model budget estimate MODEL (--text TEXT | --text-file PATH) [--digest DIGEST] [--output-tokens INT] [--tool-result-tokens INT] [--project-root PATH] [--json]`
 - `infctx model budget estimate-text (--text TEXT | --text-file PATH) [--allow-large-file] [--json]`
+- `infctx context pack --model MODEL --candidate-file PATH [--digest DIGEST] [--already-reserved-tokens INT] [--persist/--no-persist] [--allow-large-file] [--project-root PATH] [--json]`
+- `infctx context manifest list [--project-root PATH] [--json]`
+- `infctx context manifest show MANIFEST_ID [--project-root PATH] [--json]`
 - `infctx init [--project-root PATH] [--json]`
 - `infctx session [--goal TEXT] [--project-root PATH] [--debounce-ms INT] [--min-interval-sec INT] [--once] [--json]`
 - `infctx watch [--goal TEXT] [--project-root PATH] [--debounce-ms INT] [--min-interval-sec INT]`
@@ -51,9 +54,39 @@ Notes:
 
 - `setup` probes the configured local Ollama service and installed models. It never downloads a model. `--check-only` performs no writes; `--yes` accepts additive `.infctx` initialization/configuration without prompting.
 - `model budget estimate-text` reports the versioned conservative heuristic and legacy byte estimate without loading a profile or contacting Ollama. File input is limited to 8 MiB unless `--allow-large-file` is explicit; input is never truncated.
+- `context pack` ranks caller-supplied candidates and creates an inspection-only budget manifest. It uses an exact persisted profile, never contacts Ollama, and persists under `.infctx/context-manifests/` unless `--no-persist` is supplied. Candidate files are limited to 8 MiB unless `--allow-large-file` is explicit.
 - `chat` is read-only in this first slice. It streams Ollama responses, keeps a bounded in-process history, attempts a safe startup snapshot, and supports `/help`, `/status`, `/context`, and `/quit`.
 - `/context` reports bounded-history state; deterministic budget calculations remain a separate read-only inspection command and are not runtime enforcement.
 - Model profile creation inspects an already installed Ollama model and writes an uncalibrated conservative profile. It does not download or benchmark models.
+
+### Candidate JSON
+
+The file is either an array or an object with a `candidates` array. Inline content is estimated; a referenced candidate without content must provide an explicit token count.
+
+```json
+{
+  "candidates": [
+    {
+      "candidate_id": "task",
+      "category": "current_task",
+      "label": "Current task",
+      "content": "Implement deterministic packing.",
+      "mandatory": true,
+      "retention_priority": 100
+    },
+    {
+      "candidate_id": "target",
+      "category": "source_code_excerpt",
+      "label": "Target source",
+      "content": "def pack(): ...",
+      "source_path": "src/packer.py",
+      "line_start": 1,
+      "line_end": 20,
+      "direct_request_match": true
+    }
+  ]
+}
+```
 - Profile lookup is digest-specific. `show` requires `--digest` when multiple builds of the same model name are persisted.
 - Budget commands use only persisted verified profiles and never contact Ollama. Results are deterministic inspection decisions; runtime model-call enforcement is not implemented yet.
 - Text estimation normalizes line endings and conservatively counts normalized UTF-8 bytes. Supply measured counts through the Python service when exact tokenizer results are available.

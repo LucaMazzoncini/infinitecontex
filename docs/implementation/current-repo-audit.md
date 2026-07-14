@@ -78,3 +78,7 @@ Runtime: Typer, Pydantic, pydantic-settings, NetworkX, orjson, Rich, and Watchfi
 ## M2 E1 specification-name reconciliation
 
 The M2 E1 request named `09_CONTEXT_BUDGET_ENGINE.md`, `13_OLLAMA_INTEGRATION.md`, and `16_CONFIGURATION.md`. Those files do not exist in the local specification tree. The authoritative local equivalents used for implementation were `08_CONTEXT_BUDGET_GOVERNOR.md`, `07_OLLAMA_AND_MODEL_SELECTION.md`, and `16_CONFIGURATION_DEFAULTS.md`. No missing document was fabricated, and local repository naming took precedence as required by `00_READ_FIRST.md`.
+
+## M2 context-packing specification reconciliation
+
+The context-packing slice requested a local knowledge-graph specification, but the local specification tree contains no standalone knowledge-graph document. The authoritative guidance is distributed across `06_DOMAIN_MODEL.md`, `09_RETRIEVAL_AND_CONTEXT_PACKS.md`, and the existing `src/infinitecontex/graph/store.py`. The implementation consumes explicit candidates only and does not expand or duplicate the existing graph/retrieval engines.

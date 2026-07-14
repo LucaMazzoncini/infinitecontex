@@ -20,6 +20,9 @@ from infinitecontex.context_budget.calculator import ContextBudgetCalculator
 from infinitecontex.context_budget.estimation import ConservativeTextEstimator, Utf8ByteUpperBoundEstimator
 from infinitecontex.context_budget.models import ContextSectionCategory, ContextSectionInput
 from infinitecontex.context_budget.service import ContextBudgetService
+from infinitecontex.context_packing.models import ContextCandidate, ContextManifest
+from infinitecontex.context_packing.service import ContextPackingService
+from infinitecontex.context_packing.store import ContextManifestStore
 from infinitecontex.core.config import AppConfig, load_app_config
 from infinitecontex.core.models import PromptMode
 from infinitecontex.llm.ollama import OllamaClient
@@ -34,10 +37,15 @@ app = typer.Typer(help="Infinite Context: local-first project memory engine", in
 model_app = typer.Typer(help="Inspect local model configuration")
 profile_app = typer.Typer(help="Create and inspect digest-bound model profiles")
 budget_app = typer.Typer(help="Inspect deterministic context budgets")
+context_app = typer.Typer(help="Rank and pack explicit context candidates")
+manifest_app = typer.Typer(help="Inspect persisted context manifests")
 ESTIMATE_TEXT_FILE_LIMIT_BYTES = 8 * 1024 * 1024
+CONTEXT_CANDIDATE_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 model_app.add_typer(profile_app, name="profile")
 model_app.add_typer(budget_app, name="budget")
 app.add_typer(model_app, name="model")
+context_app.add_typer(manifest_app, name="manifest")
+app.add_typer(context_app, name="context")
 console = Console()
 _global_project_root: Path | None = None
 
@@ -83,6 +91,103 @@ def _context_budget_service(project_root: Path | None) -> ContextBudgetService:
         ConservativeTextEstimator(),
         ContextBudgetCalculator(cfg.context_budget.warning_threshold_basis_points),
     )
+
+
+def _context_packing_service(project_root: Path | None) -> ContextPackingService:
+    root = _effective_project_root(project_root)
+    cfg = load_app_config(root)
+    layout = build_layout(root)
+    return ContextPackingService(
+        ModelProfileStore(layout.model_profiles),
+        ContextBudgetCalculator(cfg.context_budget.warning_threshold_basis_points),
+        manifest_store=ContextManifestStore(layout.context_manifests),
+    )
+
+
+@context_app.command("pack")
+def context_pack(
+    model: Annotated[str, typer.Option("--model", help="Persisted Ollama model profile name")],
+    candidate_file: Annotated[Path, typer.Option("--candidate-file", help="UTF-8 candidate JSON file")],
+    digest: Annotated[str | None, typer.Option("--digest")] = None,
+    caller_reserved_tokens: Annotated[int, typer.Option("--already-reserved-tokens", min=0)] = 0,
+    persist: Annotated[bool, typer.Option("--persist/--no-persist")] = True,
+    allow_large_file: Annotated[
+        bool,
+        typer.Option("--allow-large-file", help="Explicitly allow candidate files larger than 8 MiB"),
+    ] = False,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Create an inspection-only packing manifest from explicit JSON candidates."""
+    candidates = _run_action(
+        lambda: _read_context_candidates(candidate_file, allow_large_file),
+        emit=False,
+    )
+    service = _context_packing_service(project_root)
+    manifest = _run_action(
+        lambda: service.pack(
+            model,
+            cast(list[ContextCandidate], candidates),
+            digest=digest,
+            caller_reserved_input_tokens=caller_reserved_tokens,
+            persist=persist,
+        ),
+        emit=False,
+    )
+    if hasattr(manifest, "model_dump"):
+        _emit(manifest.model_dump(mode="json"), json, "context_manifest")
+
+
+@manifest_app.command("list")
+def context_manifest_list(
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List persisted context manifests without contacting Ollama."""
+    store = _context_packing_service(project_root).manifest_store
+    assert store is not None
+    manifests = _run_action(store.list_manifests, emit=False)
+    payload = [
+        {
+            "manifest_id": item.manifest_id,
+            "calculated_at": item.calculated_at.isoformat(),
+            "model": item.model_identity.model_name,
+            "digest": item.model_identity.model_digest,
+            "decision": item.decision,
+            "included_tokens": item.included_token_total,
+            "remaining_tokens": item.remaining_pack_tokens,
+        }
+        for item in cast(list[ContextManifest], manifests)
+    ]
+    _emit(payload, json, "context_manifests")
+
+
+@manifest_app.command("show")
+def context_manifest_show(
+    manifest_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show one persisted context manifest."""
+    store = _context_packing_service(project_root).manifest_store
+    assert store is not None
+    manifest = _run_action(lambda: store.load(manifest_id), emit=False)
+    if hasattr(manifest, "model_dump"):
+        _emit(manifest.model_dump(mode="json"), json, "context_manifest")
+
+
+def _read_context_candidates(path: Path, allow_large_file: bool) -> list[ContextCandidate]:
+    data = path.read_bytes()
+    if len(data) > CONTEXT_CANDIDATE_FILE_LIMIT_BYTES and not allow_large_file:
+        raise ValueError(
+            f"candidate file is {len(data)} bytes; the safe default limit is "
+            f"{CONTEXT_CANDIDATE_FILE_LIMIT_BYTES} bytes (pass --allow-large-file to process it explicitly)"
+        )
+    raw = orjson.loads(data)
+    values = raw.get("candidates") if isinstance(raw, dict) else raw
+    if not isinstance(values, list):
+        raise ValueError("candidate JSON must be an array or an object with a `candidates` array")
+    return [ContextCandidate.model_validate(value) for value in values]
 
 
 @budget_app.command("show")
@@ -511,6 +616,31 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
             console.print(_format_dict(summary, "Context Budget"))
         elif format_type == "token_estimate":
             console.print(_format_dict(payload, "Conservative Token Estimate"))
+        elif format_type == "context_manifest":
+            included = payload.get("included", [])
+            excluded = payload.get("excluded", [])
+            summary = {
+                "manifest_id": payload.get("manifest_id", ""),
+                "decision": payload.get("decision", ""),
+                "model_profile_id": payload.get("model_profile_id", ""),
+                "estimator": payload.get("estimator_strategy", ""),
+                "available_pack_tokens": payload.get("available_pack_tokens", 0),
+                "included_tokens": payload.get("included_token_total", 0),
+                "remaining_tokens": payload.get("remaining_pack_tokens", 0),
+                "included": [
+                    f"{item.get('candidate', {}).get('candidate_id')}: {item.get('reason')}"
+                    for item in included
+                    if isinstance(item, dict) and isinstance(item.get("candidate"), dict)
+                ],
+                "excluded": [
+                    f"{item.get('candidate_id')}: {item.get('reason')} ({item.get('detail')})"
+                    for item in excluded
+                    if isinstance(item, dict)
+                ],
+                "warnings": payload.get("warnings", []),
+                "enforcement": payload.get("enforcement", ""),
+            }
+            console.print(_format_dict(summary, "Context Packing Manifest"))
         elif format_type == "ingest_chat":
             summary = {
                 "developer_goal": payload.get("developer_goal", ""),
@@ -734,6 +864,25 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                         str(item.get("calibration_status", "")),
                     )
                 console.print(Panel(table, title="[bold]Model Profiles[/bold]", expand=False))
+        elif format_type == "context_manifests":
+            if not payload:
+                console.print("[dim]No context manifests found.[/dim]")
+            else:
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("Manifest")
+                table.add_column("Model")
+                table.add_column("Decision")
+                table.add_column("Included", justify="right")
+                table.add_column("Remaining", justify="right")
+                for item in payload:
+                    table.add_row(
+                        str(item.get("manifest_id", "")),
+                        str(item.get("model", "")),
+                        str(item.get("decision", "")),
+                        str(item.get("included_tokens", 0)),
+                        str(item.get("remaining_tokens", 0)),
+                    )
+                console.print(Panel(table, title="[bold]Context Manifests[/bold]", expand=False))
         else:
             for item in payload:
                 console.print(item)

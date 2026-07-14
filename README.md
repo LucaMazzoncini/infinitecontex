@@ -153,6 +153,15 @@ infctx model budget estimate-text --text-file .\request.cs --json
 
 The result identifies `conservative-mixed-text-v2` and is an upper estimate, not an exact or measured token count. Files larger than 8 MiB require the explicit `--allow-large-file` option and are never silently truncated.
 
+Explicit context candidates can be ranked and packed offline against a persisted model profile:
+
+```powershell
+infctx context pack --model qwen3.6:35b --candidate-file .\candidates.json
+infctx context manifest list
+```
+
+The resulting `.infctx/context-manifests/` record is inspection-only: it explains every inclusion, exclusion, duplicate, token cost, and remaining budget without changing live chat behavior.
+
 | Command | Purpose |
 | --- | --- |
 | `infctx init` | Create `.infctx/` and initialize local metadata |
