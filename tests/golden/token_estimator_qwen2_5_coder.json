@@ -1,0 +1,42 @@
+{
+  "counts": {
+    "accented_latin": 24,
+    "ascii_heavy": 18,
+    "cjk": 26,
+    "combining": 26,
+    "compiler_error": 38,
+    "crlf": 9,
+    "csharp": 48,
+    "emoji": 37,
+    "empty": 0,
+    "english_prose": 24,
+    "file_paths": 54,
+    "git_diff": 74,
+    "italian_prose": 37,
+    "json": 48,
+    "lf": 9,
+    "long_identifier": 27,
+    "markdown": 37,
+    "minified_json": 35,
+    "mixed_prose_code": 36,
+    "powershell": 42,
+    "python": 40,
+    "shell": 29,
+    "stack_trace": 45,
+    "unity_csharp": 46,
+    "whitespace": 3,
+    "yaml": 41
+  },
+  "reference": {
+    "command": "uv run --with tokenizers scripts/regenerate_token_estimator_goldens.py --tokenizer-json <local-tokenizer.json> --corpus tests/fixtures/token_estimator/corpus.json --output tests/golden/token_estimator_qwen2_5_coder.json --repository Qwen/Qwen2.5-Coder-7B-Instruct --revision 0b044f5762b0be9c48fc2b7bc216454c5eff0bb8 --generated-at 2026-07-15T00:00:00Z",
+    "generated_at": "2026-07-15T00:00:00Z",
+    "implementation": "Hugging Face tokenizers.Tokenizer.encode(add_special_tokens=False)",
+    "kind": "model-family tokenizer reference; not exact for every supported model",
+    "normalization": "CRLF and lone CR replaced with LF before encoding; no trimming or Unicode normalization",
+    "repository": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "revision": "0b044f5762b0be9c48fc2b7bc216454c5eff0bb8",
+    "tokenizer_asset": "tokenizer.json",
+    "tokenizer_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+  },
+  "schema_version": 1
+}

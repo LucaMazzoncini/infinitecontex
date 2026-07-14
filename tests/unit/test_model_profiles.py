@@ -75,6 +75,7 @@ def test_conservative_profile_separates_context_capacities_and_is_uncalibrated(t
     assert profile.calibration_status == CalibrationStatus.UNCALIBRATED
     assert profile.calibrated_at is None
     assert profile.calibration_evidence == []
+    assert profile.token_estimation_strategy == "conservative-mixed-text-v2"
     assert "unused.large" not in profile.model_identity.metadata["model_info"]
 
 
@@ -105,6 +106,14 @@ def test_deterministic_serialization_and_idempotent_reuse(tmp_path: Path) -> Non
     assert created is False
     assert reused.profile_id == profile.profile_id
     assert len(list(tmp_path.glob("*.json"))) == 1
+
+
+def test_legacy_estimator_strategy_profile_remains_readable(tmp_path: Path) -> None:
+    store = ModelProfileStore(tmp_path)
+    legacy = _create(store).model_copy(update={"token_estimation_strategy": "normalized-utf8-byte-upper-bound-v1"})
+    store.save(legacy)
+    loaded = store.find_exact("ollama", "qwen3.6:35b", "sha256:abc")
+    assert loaded.token_estimation_strategy == "normalized-utf8-byte-upper-bound-v1"
 
 
 def test_atomic_write_uses_same_directory_replace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

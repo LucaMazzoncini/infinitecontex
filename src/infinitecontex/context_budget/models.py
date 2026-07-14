@@ -80,6 +80,9 @@ class ContextSection(BaseModel):
     token_count: int = Field(ge=0)
     count_provenance: TokenCountProvenance
     estimation_strategy: str
+    estimation_version: int | None = Field(default=None, ge=1)
+    normalization: str | None = None
+    conservatism: str | None = None
     source_ref: str | None = None
     mandatory: bool
     priority: RetentionPriority

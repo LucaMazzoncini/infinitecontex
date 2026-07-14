@@ -88,18 +88,27 @@ class ContextBudgetService:
             count = section.token_count
             provenance = TokenCountProvenance.MEASURED
             strategy = "explicit-token-count"
+            version = None
+            normalization = None
+            conservatism = None
         else:
             assert section.text is not None
             estimate = self.estimator.estimate(section.text)
             count = estimate.token_count
             provenance = estimate.provenance
             strategy = self.estimator.strategy_name
+            version = estimate.strategy_version
+            normalization = estimate.normalization
+            conservatism = estimate.conservatism
         return ContextSection(
             name=section.name,
             category=section.category,
             token_count=count,
             count_provenance=provenance,
             estimation_strategy=strategy,
+            estimation_version=version,
+            normalization=normalization,
+            conservatism=conservatism,
             source_ref=section.source_ref,
             mandatory=section.mandatory,
             priority=section.priority,

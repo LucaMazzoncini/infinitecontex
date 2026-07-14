@@ -106,7 +106,7 @@ class ModelProfileService:
             safety_margin_tokens=safety,
             maximum_recommended_input_tokens=maximum_input,
             tokenizer_strategy="provider-tokenizer-unverified",
-            token_estimation_strategy="conservative-fallback-pending-m2-e2",
+            token_estimation_strategy="conservative-mixed-text-v2",
             calibration_status=CalibrationStatus.UNCALIBRATED,
             calibrated_at=None,
             calibration_evidence=[],

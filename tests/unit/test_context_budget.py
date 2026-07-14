@@ -248,6 +248,10 @@ def test_service_distinguishes_measured_estimated_and_supports_large_integers(tm
     )
     assert result.estimation_confidence == EstimationConfidence.MIXED
     assert [section.count_provenance for section in result.sections] == ["measured", "heuristic"]
+    assert result.sections[0].estimation_version is None
+    assert result.sections[0].normalization is None
+    assert result.sections[1].estimation_version == 2
+    assert result.sections[1].normalization == "crlf-and-cr-to-lf;no-trimming"
     assert result.maximum_recommended_input_tokens == 700
 
 

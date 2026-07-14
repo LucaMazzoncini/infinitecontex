@@ -17,7 +17,7 @@ from rich.table import Table
 from watchfiles import Change, watch
 
 from infinitecontex.context_budget.calculator import ContextBudgetCalculator
-from infinitecontex.context_budget.estimation import ConservativeTextEstimator
+from infinitecontex.context_budget.estimation import ConservativeTextEstimator, Utf8ByteUpperBoundEstimator
 from infinitecontex.context_budget.models import ContextSectionCategory, ContextSectionInput
 from infinitecontex.context_budget.service import ContextBudgetService
 from infinitecontex.core.config import AppConfig, load_app_config
@@ -34,6 +34,7 @@ app = typer.Typer(help="Infinite Context: local-first project memory engine", in
 model_app = typer.Typer(help="Inspect local model configuration")
 profile_app = typer.Typer(help="Create and inspect digest-bound model profiles")
 budget_app = typer.Typer(help="Inspect deterministic context budgets")
+ESTIMATE_TEXT_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 model_app.add_typer(profile_app, name="profile")
 model_app.add_typer(budget_app, name="budget")
 app.add_typer(model_app, name="model")
@@ -141,6 +142,56 @@ def model_budget_estimate(
     )
     if hasattr(result, "model_dump"):
         _emit(result.model_dump(mode="json"), json, "model_budget")
+
+
+@budget_app.command("estimate-text")
+def model_budget_estimate_text(
+    text: Annotated[str | None, typer.Option("--text", help="Text to estimate")] = None,
+    text_file: Annotated[Path | None, typer.Option("--text-file", help="UTF-8 text file to estimate")] = None,
+    allow_large_file: Annotated[
+        bool,
+        typer.Option("--allow-large-file", help="Explicitly allow files larger than 8 MiB"),
+    ] = False,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Inspect raw deterministic estimation without a profile, Ollama, or network access."""
+    if (text is None) == (text_file is None):
+        _print_error("Provide exactly one of `--text` or `--text-file`.")
+        raise typer.Exit(2)
+    try:
+        content = text if text is not None else _read_estimation_file(cast(Path, text_file), allow_large_file)
+    except (OSError, UnicodeError, ValueError) as exc:
+        _print_error(f"Could not read `{text_file}`: {exc}. Fix the input and retry.")
+        raise typer.Exit(2) from exc
+
+    estimate = ConservativeTextEstimator().estimate(content)
+    legacy = Utf8ByteUpperBoundEstimator().estimate(content)
+    payload = {
+        "strategy": estimate.strategy_name,
+        "strategy_version": estimate.strategy_version,
+        "estimated_tokens": estimate.token_count,
+        "provenance": estimate.provenance,
+        "measured": False,
+        "exact": False,
+        "normalization": estimate.normalization,
+        "normalized_characters": estimate.normalized_characters,
+        "normalized_utf8_bytes": estimate.normalized_utf8_bytes,
+        "content_class": estimate.content_class,
+        "conservatism": estimate.conservatism,
+        "legacy_strategy": legacy.strategy_name,
+        "legacy_estimated_tokens": legacy.token_count,
+    }
+    _emit(payload, json, "token_estimate")
+
+
+def _read_estimation_file(path: Path, allow_large_file: bool) -> str:
+    data = path.read_bytes()
+    if len(data) > ESTIMATE_TEXT_FILE_LIMIT_BYTES and not allow_large_file:
+        raise ValueError(
+            f"file is {len(data)} bytes; the safe default limit is {ESTIMATE_TEXT_FILE_LIMIT_BYTES} bytes "
+            "(pass --allow-large-file to process it explicitly)"
+        )
+    return data.decode("utf-8")
 
 
 @profile_app.command("list")
@@ -458,6 +509,8 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                 "warnings": payload.get("warnings", []),
             }
             console.print(_format_dict(summary, "Context Budget"))
+        elif format_type == "token_estimate":
+            console.print(_format_dict(payload, "Conservative Token Estimate"))
         elif format_type == "ingest_chat":
             summary = {
                 "developer_goal": payload.get("developer_goal", ""),

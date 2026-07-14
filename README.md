@@ -144,6 +144,15 @@ uv run infctx session --goal "refactor restore flow"
 
 ## Commands
 
+Raw conservative token estimation is available without a profile, Ollama, or network access:
+
+```powershell
+infctx model budget estimate-text --text "public sealed class Demo {}"
+infctx model budget estimate-text --text-file .\request.cs --json
+```
+
+The result identifies `conservative-mixed-text-v2` and is an upper estimate, not an exact or measured token count. Files larger than 8 MiB require the explicit `--allow-large-file` option and are never silently truncated.
+
 | Command | Purpose |
 | --- | --- |
 | `infctx init` | Create `.infctx/` and initialize local metadata |
