@@ -162,6 +162,16 @@ infctx context manifest list
 
 The resulting `.infctx/context-manifests/` record explains every inclusion, exclusion, duplicate, token cost, and remaining budget. `infctx chat` now revalidates such a manifest and the exact frozen outbound request through a fail-closed admission gate before streaming; compact results are stored in `.infctx/context-admissions/`.
 
+Strict plans can be validated and inspected entirely offline:
+
+```powershell
+infctx plan validate --file .\examples\plans\minimal-plan.json
+infctx plan import --file .\examples\plans\minimal-plan.json
+infctx plan list
+```
+
+Plan import persists declarations and immutable revisions only. It never invokes Ollama, grants capabilities, or executes tasks.
+
 | Command | Purpose |
 | --- | --- |
 | `infctx init` | Create `.infctx/` and initialize local metadata |

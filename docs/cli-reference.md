@@ -20,6 +20,13 @@ Structured workflow:
 - `infctx context admit --request-file PATH [--allow-large-file] [--project-root PATH] [--json]`
 - `infctx context admission list [--project-root PATH] [--json]`
 - `infctx context admission show ADMISSION_ID [--project-root PATH] [--json]`
+- `infctx plan validate --file PLAN.json [--allow-large-file] [--json]`
+- `infctx plan import --file PLAN.json [--reason TEXT] [--allow-large-file] [--project-root PATH] [--json]`
+- `infctx plan list [--project-root PATH] [--json]`
+- `infctx plan show PLAN_ID [--revision N] [--project-root PATH] [--json]`
+- `infctx plan history PLAN_ID [--project-root PATH] [--json]`
+- `infctx plan graph PLAN_ID [--revision N] [--project-root PATH] [--json]`
+- `infctx plan ready PLAN_ID [--project-root PATH] [--json]`
 - `infctx context manifest list [--project-root PATH] [--json]`
 - `infctx context manifest show MANIFEST_ID [--project-root PATH] [--json]`
 - `infctx init [--project-root PATH] [--json]`
@@ -61,6 +68,7 @@ Notes:
 - `context admit` validates a frozen request against an exact persisted profile and manifest without contacting Ollama. Request JSON follows `AdmissionRequest`: exact provider/model/digest/profile/manifest identity, typed `system_instructions` and `current_user_request`, optional typed section arrays, allowances, and a timezone-aware `calculated_at`. Input is limited to 8 MiB unless explicitly allowed.
 - `context admission list/show` inspect compact records under `.infctx/context-admissions/`; prompt content is not persisted.
 - `chat` remains read-only, but every turn now creates a deterministic manifest and passes through the fail-closed runtime admission gate before Ollama streaming. History is bounded and optional; system instructions and the current user request are mandatory and are never silently truncated. `/context` reports the active gate, digest, profile, latest manifest/admission, token budget, and reserves.
+- `plan validate` strictly analyzes JSON without persistence. `plan import` writes only a completely valid immutable revision. `list`, `show`, `history`, `graph`, and `ready` are offline inspection commands; none contacts Ollama or executes a task. The default plan-file limit is 8 MiB, and no input is silently repaired or truncated.
 - `/context` reports bounded-history state; deterministic budget calculations remain a separate read-only inspection command and are not runtime enforcement.
 - Model profile creation inspects an already installed Ollama model and writes an uncalibrated conservative profile. It does not download or benchmark models.
 

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "stable_plan_key": "docs-example",
+  "title": "Document a deterministic example",
+  "objective": "Add and validate a small synthetic planning example.",
+  "status": "draft",
+  "planner_provenance": "human_authored",
+  "repository_ref": "local-repository",
+  "tasks": [
+    {
+      "task_key": "design",
+      "title": "Define the example",
+      "objective": "Define the synthetic example contract.",
+      "task_type": "design",
+      "status": "ready",
+      "acceptance_criteria": [
+        {
+          "criterion_id": "criterion-contract",
+          "description": "The example uses only synthetic content.",
+          "verification_method": "Review the checked-in JSON fixture.",
+          "required_evidence_type": "human_approval",
+          "mandatory": true,
+          "status": "pending",
+          "provenance": "human_authored"
+        }
+      ],
+      "requested_capabilities": ["read_repository"],
+      "provenance": "human_authored"
+    },
+    {
+      "task_key": "validate",
+      "title": "Validate the example",
+      "objective": "Validate the strict plan schema without executing tasks.",
+      "task_type": "validation",
+      "status": "draft",
+      "dependency_keys": ["design"],
+      "required_evidence": [
+        {
+          "evidence_id": "validation-report",
+          "evidence_type": "static_analysis_result",
+          "description": "A deterministic plan validation report.",
+          "mandatory": true
+        }
+      ],
+      "provenance": "human_authored"
+    }
+  ]
+}

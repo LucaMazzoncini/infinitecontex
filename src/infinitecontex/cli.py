@@ -30,6 +30,8 @@ from infinitecontex.llm.ollama import OllamaClient
 from infinitecontex.model_profiles.models import ModelProfile
 from infinitecontex.model_profiles.service import ModelProfileService
 from infinitecontex.model_profiles.store import ModelProfileStore
+from infinitecontex.planning.models import PlanInput, PlanRevision, PlanValidationReport
+from infinitecontex.planning.service import PlanningService
 from infinitecontex.service import InfiniteContextService
 from infinitecontex.storage.layout import build_layout
 from infinitecontex.version import __version__
@@ -41,6 +43,7 @@ budget_app = typer.Typer(help="Inspect deterministic context budgets")
 context_app = typer.Typer(help="Rank and pack explicit context candidates")
 manifest_app = typer.Typer(help="Inspect persisted context manifests")
 admission_app = typer.Typer(help="Inspect compact context admission records")
+plan_app = typer.Typer(help="Validate and inspect strict persisted task DAGs")
 ESTIMATE_TEXT_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 CONTEXT_CANDIDATE_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 model_app.add_typer(profile_app, name="profile")
@@ -49,6 +52,7 @@ app.add_typer(model_app, name="model")
 context_app.add_typer(manifest_app, name="manifest")
 context_app.add_typer(admission_app, name="admission")
 app.add_typer(context_app, name="context")
+app.add_typer(plan_app, name="plan")
 console = Console()
 _global_project_root: Path | None = None
 
@@ -116,6 +120,171 @@ def _context_admission_gate(project_root: Path | None) -> ContextAdmissionGate:
         ContextManifestStore(layout.context_manifests),
         AdmissionRecordStore(layout.context_admissions),
     )
+
+
+def _planning_service(project_root: Path | None) -> PlanningService:
+    from infinitecontex.planning.store import PlanStore
+
+    layout = build_layout(_effective_project_root(project_root))
+    return PlanningService(PlanStore(layout.plans))
+
+
+@plan_app.command("validate")
+def plan_validate(
+    file: Annotated[Path, typer.Option("--file", help="Strict UTF-8 plan JSON")],
+    allow_large_file: Annotated[bool, typer.Option("--allow-large-file")] = False,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Validate and normalize a plan without persisting it."""
+    service = _planning_service(None)
+    plan = cast(
+        PlanInput,
+        _run_action(lambda: service.parse_file(file, allow_large_file=allow_large_file), emit=False),
+    )
+    _, report = service.validate(plan)
+    _emit(report.model_dump(mode="json"), json, "plan_validation")
+    if not report.valid:
+        raise typer.Exit(2)
+
+
+@plan_app.command("import")
+def plan_import(
+    file: Annotated[Path, typer.Option("--file", help="Strict UTF-8 plan JSON")],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    reason: Annotated[str, typer.Option("--reason")] = "Explicit CLI plan import",
+    allow_large_file: Annotated[bool, typer.Option("--allow-large-file")] = False,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Persist a completely valid plan as an immutable revision."""
+    service = _planning_service(project_root)
+    plan = cast(
+        PlanInput,
+        _run_action(lambda: service.parse_file(file, allow_large_file=allow_large_file), emit=False),
+    )
+    revision, report, persisted = cast(
+        tuple[PlanRevision, PlanValidationReport, bool],
+        _run_action(lambda: service.import_plan(plan, revision_reason=reason), emit=False),
+    )
+    _emit(
+        {
+            "persisted": persisted,
+            "plan": revision.model_dump(mode="json"),
+            "validation": report.model_dump(mode="json"),
+        },
+        json,
+        "plan_import",
+    )
+
+
+@plan_app.command("list")
+def plan_list(
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    plans = cast(list[PlanRevision], _run_action(_planning_service(project_root).store.list_current, emit=False))
+    payload = [
+        {
+            "plan_id": item.plan_id,
+            "title": item.title,
+            "status": item.status.value,
+            "revision": item.current_revision,
+            "task_count": item.task_count,
+            "graph_fingerprint": item.graph_fingerprint,
+            "updated_at": item.updated_at.isoformat(),
+        }
+        for item in plans
+    ]
+    _emit(payload, json, "plans")
+
+
+@plan_app.command("show")
+def plan_show(
+    plan_id: Annotated[str, typer.Argument()],
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    plan, report = cast(
+        tuple[PlanRevision, PlanValidationReport],
+        _run_action(lambda: _planning_service(project_root).inspect(plan_id, revision), emit=False),
+    )
+    _emit(
+        {"plan": plan.model_dump(mode="json"), "validation": report.model_dump(mode="json")},
+        json,
+        "plan",
+    )
+
+
+@plan_app.command("history")
+def plan_history(
+    plan_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    revisions = cast(
+        list[PlanRevision],
+        _run_action(lambda: _planning_service(project_root).store.history(plan_id), emit=False),
+    )
+    _emit(
+        [
+            {
+                "revision": item.current_revision,
+                "revision_fingerprint": item.revision_fingerprint,
+                "previous_revision_fingerprint": item.previous_revision_fingerprint,
+                "reason": item.revision_reason,
+                "changed_task_ids": item.changed_task_ids,
+                "created_at": item.updated_at.isoformat(),
+            }
+            for item in revisions
+        ],
+        json,
+        "plan_history",
+    )
+
+
+@plan_app.command("graph")
+def plan_graph(
+    plan_id: Annotated[str, typer.Argument()],
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    plan, report = cast(
+        tuple[PlanRevision, PlanValidationReport],
+        _run_action(lambda: _planning_service(project_root).inspect(plan_id, revision), emit=False),
+    )
+    tasks = {task.task_id: task for task in plan.tasks}
+    payload = [
+        {
+            "order": index + 1,
+            "task_id": task_id,
+            "task_key": tasks[task_id].task_key,
+            "status": tasks[task_id].status.value,
+            "dependencies": tasks[task_id].dependency_ids,
+            "depth": report.readiness.dependency_depths[task_id] if report.readiness else None,
+        }
+        for index, task_id in enumerate(report.topological_task_ids)
+    ]
+    _emit(payload, json, "plan_graph")
+
+
+@plan_app.command("ready")
+def plan_ready(
+    plan_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    plan, report = cast(
+        tuple[PlanRevision, PlanValidationReport],
+        _run_action(lambda: _planning_service(project_root).inspect(plan_id), emit=False),
+    )
+    ready_ids = set(report.readiness.ready_task_ids if report.readiness else ())
+    payload = [
+        {"task_id": task.task_id, "task_key": task.task_key, "title": task.title, "status": task.status.value}
+        for task in plan.tasks
+        if task.task_id in ready_ids
+    ]
+    _emit(payload, json, "plan_ready")
 
 
 @context_app.command("admit")

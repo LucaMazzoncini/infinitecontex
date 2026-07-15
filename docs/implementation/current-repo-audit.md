@@ -1,5 +1,11 @@
 # Current Repository Audit
 
+## M3 E1 strict-planning reconciliation
+
+The requested task-decomposition specification maps locally to `10_TASK_PLANNING_AND_DECOMPOSITION.md`; no standalone task-persistence document exists. Domain and storage authority is distributed across `06_DOMAIN_MODEL.md`, `05_ARCHITECTURE_EVOLUTION.md`, `storage/layout.py`, and the established atomic JSON stores. M3 E1 therefore adds an independent `planning/` package and `.infctx/plans/` layout instead of placing execution semantics into the existing generic knowledge graph.
+
+Existing captured tasks are `IntentContext.active_tasks: list[str]` populated by snapshot/chat ingestion. They remain historical intent signals with unchanged behavior. There is no adapter, automatic migration, or reinterpretation into strict DAG tasks in this slice.
+
 ## M2 E4 additive runtime update
 
 The repository now includes `context_admission/`, which reuses the persisted profile store, context estimator/calculator, manifest store, and Ollama client abstraction. It adds no second client and no repository retrieval. `chat` is the sole integrated model-call path and is now fail-closed through an immutable admitted payload. The roadmap's broad runtime specification mentions later tool execution; this slice deliberately implements only chat admission because editing, autonomous tools, retrieval, and task execution remain explicitly out of scope.
