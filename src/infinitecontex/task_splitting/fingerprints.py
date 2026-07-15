@@ -14,6 +14,14 @@ def sha256_payload(payload: Any) -> str:
 
 def proposal_fingerprint(proposal: SplitProposal) -> str:
     payload = proposal.model_dump(mode="json", exclude={"proposal_id", "semantic_fingerprint", "created_at"})
+    source_fit = payload.get("source_context_fit")
+    if source_fit is None:
+        payload.pop("source_context_fit", None)
+    else:
+        source_fit.pop("created_at", None)
+        source_fit.pop("analysis_id", None)
+    if payload.get("direct_child_count") is None:
+        payload.pop("direct_child_count", None)
     for child in payload["proposed_children"]:
         child["context_fit"].pop("created_at", None)
         child["context_fit"].pop("analysis_id", None)
@@ -21,6 +29,4 @@ def proposal_fingerprint(proposal: SplitProposal) -> str:
 
 
 def approval_fingerprint(approval: SplitApproval) -> str:
-    return sha256_payload(
-        approval.model_dump(mode="json", exclude={"approval_id", "approval_fingerprint"})
-    )
+    return sha256_payload(approval.model_dump(mode="json", exclude={"approval_id", "approval_fingerprint"}))

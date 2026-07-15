@@ -182,6 +182,16 @@ infctx plan context-analysis list PLAN_ID
 
 Resolution freezes bounded repository content, reports every required and optional reference, and rejects traversal or unsafe links. Context fit uses verified operational limits rather than advertised capacity and provides deterministic narrowing or split recommendations without rewriting or executing the plan. It is inspection only and is distinct from runtime request admission.
 
+Deterministic split proposals can now be reviewed and explicitly decided entirely offline:
+
+~~~powershell
+infctx plan split PLAN_ID --task TASK_ID --model MODEL --digest DIGEST
+infctx plan split-proposal show PLAN_ID PROPOSAL_ID --json
+infctx plan approve-split PLAN_ID PROPOSAL_ID --actor "User" --reason "Reviewed" --acknowledge-warnings
+~~~
+
+Creating, listing, or showing a proposal never changes the plan. Approval revalidates the exact revision, graph, source task, repository snapshot, profile/digest, source and leaf context analyses, contract coverage, and final DAG before it creates exactly the next immutable revision. Rejection records the human decision without applying anything.
+
 | Command | Purpose |
 | --- | --- |
 | `infctx init` | Create `.infctx/` and initialize local metadata |
@@ -208,6 +218,10 @@ Resolution freezes bounded repository content, reports every required and option
 | `infctx plan resolve` | Resolve explicit plan paths and symbols against a repository snapshot |
 | `infctx plan context-fit` | Inspect whether declared task context fits an exact persisted profile |
 | `infctx plan context-analysis` | List or show persisted task-context analyses |
+| `infctx plan split` | Persist and review a deterministic split proposal without revising the plan |
+| `infctx plan split-proposal` | List or show complete proposal records |
+| `infctx plan approve-split` / `reject-split` | Record an explicit human decision; approval applies one verified revision |
+| `infctx plan approval` | List or show immutable split decisions |
 
 Global options:
 
@@ -235,6 +249,8 @@ Infinite Context keeps generated files inside `.infctx/`:
   prompts/
   plans/
     PLAN_ID/analyses/REVISION/task-context/
+    PLAN_ID/splits/proposals/
+    PLAN_ID/splits/approvals/
   snapshots/
   working_set/
 ```
@@ -267,9 +283,9 @@ uv build
 
 Current local QC:
 
-- `78` tests passing
-- `95%` total coverage
-- `100%` coverage for `src/infinitecontex/cli.py`
+- `228` tests passing
+- `91%` total coverage
+- `90%` coverage for `src/infinitecontex/cli.py`
 - `uv build` produces the wheel and source archive
 
 ## Documentation

@@ -31,6 +31,13 @@ Structured workflow:
 - `infctx plan context-fit PLAN_ID [--model MODEL] [--digest DIGEST] [--task TASK_ID] [--revision N] [--repo PATH] [--persist/--no-persist] [--project-root PATH] [--json]`
 - `infctx plan context-analysis list PLAN_ID [--revision N] [--project-root PATH] [--json]`
 - `infctx plan context-analysis show PLAN_ID ANALYSIS_ID [--revision N] [--repo PATH] [--project-root PATH] [--json]`
+- `infctx plan split PLAN_ID --task TASK_ID --model MODEL --digest DIGEST [--repo PATH] [--project-root PATH] [--json]`
+- `infctx plan split-proposal list PLAN_ID [--project-root PATH] [--json]`
+- `infctx plan split-proposal show PLAN_ID PROPOSAL_ID [--project-root PATH] [--json]`
+- `infctx plan approve-split PLAN_ID PROPOSAL_ID --actor TEXT [--reason TEXT] [--acknowledge-warnings] [--repo PATH] [--project-root PATH] [--json]`
+- `infctx plan reject-split PLAN_ID PROPOSAL_ID --actor TEXT [--reason TEXT] [--project-root PATH] [--json]`
+- `infctx plan approval list PLAN_ID [--project-root PATH] [--json]`
+- `infctx plan approval show PLAN_ID APPROVAL_ID [--project-root PATH] [--json]`
 - `infctx context manifest list [--project-root PATH] [--json]`
 - `infctx context manifest show MANIFEST_ID [--project-root PATH] [--json]`
 - `infctx init [--project-root PATH] [--json]`
@@ -76,6 +83,9 @@ Notes:
 - `plan resolve` inventories one local repository snapshot and reports every declared path and symbol outcome. `plan context-fit` freezes resolved source and reuses the existing estimator, operational budget calculator, ranker, and packer against an exact persisted digest-bound profile. Both commands are offline and read-only outside optional `.infctx` analysis/manifest persistence.
 - `plan context-fit` exits with status 2 when any selected task does not pass. Human and JSON output include token totals, included/excluded candidates, deficit, warnings, errors, and rule-based remediation. It never invokes runtime admission, Ollama, a task runner, retrieval, or automatic splitting.
 - `plan context-analysis list/show` inspect immutable compact analyses. `show` recomputes repository identity for staleness reporting; source content is not persisted by default.
+- `plan split` calls only the deterministic bounded splitter. It requires an exact task, model, and digest, persists an immutable proposal, prints a compact source-free review by default, and returns the complete proposal with `--json`. Identical regeneration is idempotent. Proposal creation, listing, and showing never revise a plan or record approval.
+- `plan approve-split` is the only split command that can apply a proposal. It requires an explicit nonblank human actor and optionally records a reason. Proposals with warnings additionally require `--acknowledge-warnings`. Before creating exactly the next revision it revalidates proposal integrity, current revision and graph, source task, repository snapshot, profile/digest, source and leaf analyses, complete contract coverage, every leaf fit, and final DAG validity. Any mismatch fails closed with a regeneration instruction.
+- `plan reject-split` records an immutable rejection without revising the plan. A proposal accepts only one decision; duplicate approval or rejection attempts fail. `plan approval list/show` are inspection only.
 - `/context` reports bounded-history state; deterministic budget calculations remain a separate read-only inspection command and are not runtime enforcement.
 - Model profile creation inspects an already installed Ollama model and writes an uncalibrated conservative profile. It does not download or benchmark models.
 

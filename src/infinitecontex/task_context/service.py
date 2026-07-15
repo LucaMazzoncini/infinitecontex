@@ -168,9 +168,7 @@ class TaskContextService:
             tuple(sorted(plan.tasks, key=lambda item: item.task_id))
             if task_ids is None
             else tuple(
-                task
-                for task in sorted(plan.tasks, key=lambda item: item.task_id)
-                if task.task_id in set(task_ids)
+                task for task in sorted(plan.tasks, key=lambda item: item.task_id) if task.task_id in set(task_ids)
             )
         )
         if task_ids is not None and len(selected) != len(set(task_ids)):

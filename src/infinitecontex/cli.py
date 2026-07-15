@@ -35,6 +35,9 @@ from infinitecontex.planning.service import PlanningService
 from infinitecontex.service import InfiniteContextService
 from infinitecontex.storage.layout import build_layout
 from infinitecontex.task_context.service import TaskContextService
+from infinitecontex.task_splitting.models import SplitApproval, SplitProposal
+from infinitecontex.task_splitting.service import TaskSplittingService
+from infinitecontex.task_splitting.store import TaskSplitStore
 from infinitecontex.version import __version__
 
 app = typer.Typer(help="Infinite Context: local-first project memory engine", invoke_without_command=True)
@@ -46,6 +49,8 @@ manifest_app = typer.Typer(help="Inspect persisted context manifests")
 admission_app = typer.Typer(help="Inspect compact context admission records")
 plan_app = typer.Typer(help="Validate and inspect strict persisted task DAGs")
 context_analysis_app = typer.Typer(help="Inspect persisted task-context analyses")
+split_proposal_app = typer.Typer(help="List and inspect deterministic split proposals")
+approval_app = typer.Typer(help="List and inspect explicit split decisions")
 ESTIMATE_TEXT_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 CONTEXT_CANDIDATE_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 model_app.add_typer(profile_app, name="profile")
@@ -56,6 +61,8 @@ context_app.add_typer(admission_app, name="admission")
 app.add_typer(context_app, name="context")
 app.add_typer(plan_app, name="plan")
 plan_app.add_typer(context_analysis_app, name="context-analysis")
+plan_app.add_typer(split_proposal_app, name="split-proposal")
+plan_app.add_typer(approval_app, name="approval")
 console = Console()
 _global_project_root: Path | None = None
 
@@ -147,6 +154,17 @@ def _task_context_service(project_root: Path | None) -> TaskContextService:
         RepositoryInventoryService(),
         TaskContextAnalysisStore(layout.plans),
         ContextManifestStore(layout.context_manifests),
+    )
+
+
+def _task_splitting_service(project_root: Path | None) -> TaskSplittingService:
+    root = _effective_project_root(project_root)
+    layout = build_layout(root)
+    planning = _planning_service(root)
+    return TaskSplittingService(
+        planning,
+        _task_context_service(root),
+        TaskSplitStore(layout.plans),
     )
 
 
@@ -375,6 +393,203 @@ def plan_context_fit(
     _emit(payload, json, "task_context_analyses")
     if any(not item.passing for item in analyses):
         raise typer.Exit(2)
+
+
+@plan_app.command("split")
+def plan_split(
+    plan_id: Annotated[str, typer.Argument()],
+    task: Annotated[str, typer.Option("--task", help="Exact persisted source task ID")],
+    model: Annotated[str, typer.Option("--model", help="Exact persisted model name")],
+    digest: Annotated[str, typer.Option("--digest", help="Exact persisted model digest")],
+    repo: Annotated[Path | None, typer.Option("--repo", help="Local repository to inspect")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Persist a deterministic split proposal without changing the plan."""
+    proposal = cast(
+        SplitProposal,
+        _run_action(
+            lambda: _task_splitting_service(project_root).propose(
+                plan_id,
+                task,
+                (repo or Path.cwd()).resolve(),
+                model_name=model,
+                digest=digest,
+            ),
+            emit=False,
+        ),
+    )
+    _emit(
+        proposal.model_dump(mode="json") if json else _split_proposal_summary(proposal),
+        json,
+        "split_proposal",
+    )
+
+
+@split_proposal_app.command("list")
+def split_proposal_list(
+    plan_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    service = _task_splitting_service(project_root)
+    proposals = cast(
+        tuple[SplitProposal, ...],
+        _run_action(lambda: service.store.list_proposals(plan_id), emit=False),
+    )
+    approvals = service.store.list_approvals(plan_id)
+    decisions = {item.proposal_id: item.decision.value for item in approvals}
+    payload = [
+        {
+            "proposal_id": item.proposal_id,
+            "source_revision": item.source_plan_revision,
+            "source_task_id": item.source_task_id,
+            "rule": item.selected_rule.value,
+            "leaf_tasks": item.total_leaf_tasks,
+            "every_leaf_fits": item.every_leaf_fits,
+            "decision": decisions.get(item.proposal_id, "pending"),
+            "created_at": item.created_at.isoformat(),
+        }
+        for item in proposals
+    ]
+    _emit(payload, json, "split_proposals")
+
+
+@split_proposal_app.command("show")
+def split_proposal_show(
+    plan_id: Annotated[str, typer.Argument()],
+    proposal_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    proposal = cast(
+        SplitProposal,
+        _run_action(
+            lambda: _task_splitting_service(project_root).store.load_proposal(plan_id, proposal_id),
+            emit=False,
+        ),
+    )
+    _emit(
+        proposal.model_dump(mode="json") if json else _split_proposal_summary(proposal),
+        json,
+        "split_proposal",
+    )
+
+
+@plan_app.command("approve-split")
+def plan_approve_split(
+    plan_id: Annotated[str, typer.Argument()],
+    proposal_id: Annotated[str, typer.Argument()],
+    actor: Annotated[str, typer.Option("--actor", help="Explicit human actor")],
+    reason: Annotated[str | None, typer.Option("--reason")] = None,
+    acknowledge_warnings: Annotated[
+        bool,
+        typer.Option(
+            "--acknowledge-warnings",
+            help="Confirm that proposal warnings were explicitly reviewed",
+        ),
+    ] = False,
+    repo: Annotated[Path | None, typer.Option("--repo", help="Local repository to revalidate")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Explicitly approve and atomically apply one verified split proposal."""
+    revision, approval = cast(
+        tuple[PlanRevision, SplitApproval],
+        _run_action(
+            lambda: _task_splitting_service(project_root).approve_and_apply(
+                plan_id,
+                proposal_id,
+                (repo or Path.cwd()).resolve(),
+                actor_identifier=actor,
+                decision_reason=reason,
+                warnings_acknowledged=acknowledge_warnings,
+            ),
+            emit=False,
+        ),
+    )
+    payload = {
+        "approval": approval.model_dump(mode="json"),
+        "resulting_revision": {
+            "plan_id": revision.plan_id,
+            "revision": revision.current_revision,
+            "revision_fingerprint": revision.revision_fingerprint,
+            "graph_fingerprint": revision.graph_fingerprint,
+            "task_count": revision.task_count,
+            "changed_task_ids": revision.changed_task_ids,
+        },
+    }
+    _emit(payload, json, "split_approval_result")
+
+
+@plan_app.command("reject-split")
+def plan_reject_split(
+    plan_id: Annotated[str, typer.Argument()],
+    proposal_id: Annotated[str, typer.Argument()],
+    actor: Annotated[str, typer.Option("--actor", help="Explicit human actor")],
+    reason: Annotated[str | None, typer.Option("--reason")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Explicitly reject one verified split proposal without changing the plan."""
+    approval = cast(
+        SplitApproval,
+        _run_action(
+            lambda: _task_splitting_service(project_root).reject(
+                plan_id,
+                proposal_id,
+                actor_identifier=actor,
+                decision_reason=reason,
+            ),
+            emit=False,
+        ),
+    )
+    _emit(approval.model_dump(mode="json"), json, "split_approval")
+
+
+@approval_app.command("list")
+def split_approval_list(
+    plan_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    approvals = cast(
+        tuple[SplitApproval, ...],
+        _run_action(
+            lambda: _task_splitting_service(project_root).store.list_approvals(plan_id),
+            emit=False,
+        ),
+    )
+    payload = [
+        {
+            "approval_id": item.approval_id,
+            "proposal_id": item.proposal_id,
+            "decision": item.decision.value,
+            "actor": item.actor_identifier,
+            "application_status": item.application_status.value,
+            "applied_revision": item.applied_revision_number,
+            "decided_at": item.decided_at.isoformat(),
+        }
+        for item in approvals
+    ]
+    _emit(payload, json, "split_approvals")
+
+
+@approval_app.command("show")
+def split_approval_show(
+    plan_id: Annotated[str, typer.Argument()],
+    approval_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    approval = cast(
+        SplitApproval,
+        _run_action(
+            lambda: _task_splitting_service(project_root).store.load_approval(plan_id, approval_id),
+            emit=False,
+        ),
+    )
+    _emit(approval.model_dump(mode="json"), json, "split_approval")
 
 
 @context_analysis_app.command("list")
@@ -793,6 +1008,83 @@ def chat(
         raise typer.Exit(3) from exc
 
 
+def _split_proposal_summary(proposal: SplitProposal) -> dict[str, object]:
+    source = proposal.source_context_fit
+    leaves = []
+    child_scopes = []
+    requested_capabilities: set[str] = set()
+    for child in proposal.proposed_children:
+        fit = child.context_fit
+        leaves.append(
+            f"{child.stable_child_key}: {fit.decision.value}, "
+            f"{fit.packed_token_total}/{fit.maximum_recommended_input_tokens} tokens, "
+            f"depth {child.split_depth}"
+        )
+        context = child.task.context_requirements
+        references = [
+            str(getattr(item, "original_value", getattr(item, "original_reference", item)))
+            for field in (
+                "required_files",
+                "required_symbols",
+                "required_tests",
+                "required_documentation",
+                "path_references",
+                "symbol_references",
+            )
+            for item in getattr(context, field)
+        ]
+        scopes = [*child.task.affected_scopes, *references]
+        child_scopes.append(f"{child.stable_child_key}: {', '.join(scopes) if scopes else 'contract-only'}")
+        requested_capabilities.update(item.value for item in child.requested_capabilities)
+
+    mappings = [
+        f"{item.category}:{item.source_key} -> "
+        f"{', '.join(item.child_keys) if item.child_keys else item.disposition.value}"
+        for item in proposal.contract_coverage.records
+        if item.category in {"acceptance_criterion", "required_evidence"}
+    ]
+    rewrites = [
+        f"{item.kind}: {item.dependent_task_key} replaces {item.old_dependency_key} "
+        f"with {', '.join(item.new_dependency_keys) or 'none'}"
+        for item in proposal.dependency_rewrites
+    ]
+    rationale = (
+        "Source task already fit; splitting is an optional deterministic proposal."
+        if proposal.optional_proposal
+        else "Required source context did not fit; deterministic splitting was required."
+    )
+    source_fit = (
+        f"{source.decision.value}, {source.packed_token_total}/{source.maximum_recommended_input_tokens} tokens"
+        if source is not None
+        else "unavailable; regenerate before approval"
+    )
+    return {
+        "proposal_id": proposal.proposal_id,
+        "proposal_fingerprint": proposal.semantic_fingerprint,
+        "source_plan": f"{proposal.plan_id} revision {proposal.source_plan_revision}",
+        "source_task": proposal.source_task_id,
+        "why_split": rationale,
+        "selected_rule": proposal.selected_rule.value,
+        "direct_children": proposal.direct_child_count,
+        "total_leaf_tasks": proposal.total_leaf_tasks,
+        "maximum_split_depth": proposal.maximum_split_depth,
+        "context_fit_before": source_fit,
+        "leaf_context_fit": leaves,
+        "child_scopes": child_scopes,
+        "criterion_evidence_mappings": mappings,
+        "dependency_rewrites": rewrites,
+        "requested_capabilities": sorted(requested_capabilities),
+        "contract_coverage": (
+            f"{'complete' if proposal.contract_coverage.complete else 'incomplete'}; "
+            f"{proposal.contract_coverage.unresolved_count} unresolved"
+        ),
+        "warnings": list(proposal.warnings),
+        "unresolved_issues": [*proposal.errors, *proposal.remediation],
+        "every_required_leaf_fits": proposal.every_leaf_fits,
+        "result_preview": (f"{proposal.resulting_task_count} tasks; graph {proposal.resulting_graph_fingerprint}"),
+    }
+
+
 def _print_error(message: str) -> None:
     console.print(Panel(message, title="Error", border_style="red", expand=False))
 
@@ -1064,6 +1356,33 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                 "stale_reasons": staleness.get("reasons", []) if isinstance(staleness, dict) else [],
             }
             console.print(_format_dict(summary, "Task Context Analysis"))
+        elif format_type == "split_proposal":
+            console.print(_format_dict(payload, "Deterministic Split Proposal"))
+        elif format_type == "split_approval":
+            summary = {
+                "approval_id": payload.get("approval_id", ""),
+                "proposal_id": payload.get("proposal_id", ""),
+                "proposal_fingerprint": payload.get("proposal_fingerprint", ""),
+                "decision": payload.get("decision", ""),
+                "actor": payload.get("actor_identifier", ""),
+                "reason": payload.get("decision_reason") or "None",
+                "application_status": payload.get("application_status", ""),
+                "applied_revision": payload.get("applied_revision_number") or "None",
+            }
+            console.print(_format_dict(summary, "Split Decision"))
+        elif format_type == "split_approval_result":
+            approval = payload.get("approval", {})
+            revision = payload.get("resulting_revision", {})
+            summary = {
+                "approval_id": approval.get("approval_id", "") if isinstance(approval, dict) else "",
+                "decision": approval.get("decision", "") if isinstance(approval, dict) else "",
+                "actor": approval.get("actor_identifier", "") if isinstance(approval, dict) else "",
+                "application_status": (approval.get("application_status", "") if isinstance(approval, dict) else ""),
+                "resulting_revision": revision.get("revision", "") if isinstance(revision, dict) else "",
+                "task_count": revision.get("task_count", "") if isinstance(revision, dict) else "",
+                "graph_fingerprint": (revision.get("graph_fingerprint", "") if isinstance(revision, dict) else ""),
+            }
+            console.print(_format_dict(summary, "Approved Split Application"))
         elif format_type == "ingest_chat":
             summary = {
                 "developer_goal": payload.get("developer_goal", ""),
@@ -1332,6 +1651,50 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                         "; ".join(str(action.get("message", "")) for action in remediation if isinstance(action, dict)),
                     )
                 console.print(Panel(table, title="[bold]Task Context Analyses[/bold]", expand=False))
+        elif format_type == "split_proposals":
+            if not payload:
+                console.print("[dim]No split proposals found.[/dim]")
+            else:
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("Proposal")
+                table.add_column("Revision", justify="right")
+                table.add_column("Task")
+                table.add_column("Rule")
+                table.add_column("Leaves", justify="right")
+                table.add_column("Fits")
+                table.add_column("Decision")
+                for item in payload:
+                    table.add_row(
+                        str(item.get("proposal_id", "")),
+                        str(item.get("source_revision", "")),
+                        str(item.get("source_task_id", "")),
+                        str(item.get("rule", "")),
+                        str(item.get("leaf_tasks", "")),
+                        str(item.get("every_leaf_fits", "")),
+                        str(item.get("decision", "")),
+                    )
+                console.print(Panel(table, title="[bold]Split Proposals[/bold]", expand=False))
+        elif format_type == "split_approvals":
+            if not payload:
+                console.print("[dim]No split decisions found.[/dim]")
+            else:
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("Approval")
+                table.add_column("Proposal")
+                table.add_column("Decision")
+                table.add_column("Actor")
+                table.add_column("Application")
+                table.add_column("Revision", justify="right")
+                for item in payload:
+                    table.add_row(
+                        str(item.get("approval_id", "")),
+                        str(item.get("proposal_id", "")),
+                        str(item.get("decision", "")),
+                        str(item.get("actor", "")),
+                        str(item.get("application_status", "")),
+                        str(item.get("applied_revision") or ""),
+                    )
+                console.print(Panel(table, title="[bold]Split Decisions[/bold]", expand=False))
         else:
             for item in payload:
                 console.print(item)

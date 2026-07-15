@@ -114,3 +114,23 @@ infctx plan context-fit PLAN_ID --model MODEL --digest sha256:EXACT_DIGEST
 ```
 
 A successful result reports `fits_target`, `fits_with_warning`, or `fits_hard_limit`. Oversized mandatory context reports `split_required`; missing required files report `required_reference_unresolved`. Remediation is deterministic advice only.
+
+## Deterministic split proposals
+
+A persisted task with at least two structural required-context units can produce a bounded proposal:
+
+~~~powershell
+infctx plan split PLAN_ID --task TASK_ID --model MODEL --digest DIGEST
+infctx plan split-proposal show PLAN_ID PROPOSAL_ID --json
+~~~
+
+The source revision remains current while the proposal is generated or inspected. The proposal contains the source fit, selected deterministic rule, direct-child and leaf counts, complete leaf fits, assigned scopes, contract mappings, dependency rewrites, requested capabilities, warnings, and the preview graph fingerprint.
+
+An approved application transforms the source task identity into a completion barrier and creates deterministic child task identities beneath it. The barrier depends on every direct child, while downstream tasks retain the source identity as their dependency, so no dependent task crosses the split early. Recursive children preserve parent task IDs and split-depth metadata. Revision 1 remains immutable and revision 2 is exactly the approved proposed graph.
+
+~~~powershell
+infctx plan approve-split PLAN_ID PROPOSAL_ID --actor "User" --reason "Reviewed" --acknowledge-warnings
+infctx plan history PLAN_ID
+~~~
+
+Rejection records a decision but leaves the source revision untouched. Capabilities requested by child tasks remain requests; splitting grants none.

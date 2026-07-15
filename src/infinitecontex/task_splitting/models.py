@@ -138,6 +138,7 @@ class SplitProposal(StrictModel):
     model_digest: str
     originating_analysis_id: str
     originating_analysis_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_context_fit: TaskContextAnalysis | None = None
     eligibility: SplitEligibility
     optional_proposal: bool
     selected_rule: SplitRule
@@ -149,12 +150,11 @@ class SplitProposal(StrictModel):
     contract_coverage: ContractCoverageReport
     shared_contract_fields: tuple[str, ...]
     shared_context_duplicate_tokens: int = Field(ge=0)
-    parent_replacement_strategy: Literal["supersede_with_completion_barrier"] = (
-        "supersede_with_completion_barrier"
-    )
+    parent_replacement_strategy: Literal["supersede_with_completion_barrier"] = "supersede_with_completion_barrier"
     proposed_plan: PlanInput
     resulting_graph_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     resulting_task_count: int = Field(ge=1)
+    direct_child_count: int | None = Field(default=None, ge=2)
     total_leaf_tasks: int = Field(ge=1)
     maximum_split_depth: int = Field(ge=1)
     every_leaf_fits: bool
@@ -174,13 +174,9 @@ class SplitProposal(StrictModel):
             raise ValueError("split proposal leaf count is inconsistent")
         if self.every_leaf_fits != all(item.context_fit.passing for item in self.proposed_children):
             raise ValueError("split proposal fit summary is inconsistent")
-        if self.validation_passed != (
-            self.every_leaf_fits and self.contract_coverage.complete and not self.errors
-        ):
+        if self.validation_passed != (self.every_leaf_fits and self.contract_coverage.complete and not self.errors):
             raise ValueError("split proposal validation summary is inconsistent")
-        if len({item.stable_child_key for item in self.proposed_children}) != len(
-            self.proposed_children
-        ):
+        if len({item.stable_child_key for item in self.proposed_children}) != len(self.proposed_children):
             raise ValueError("split proposal child keys must be unique")
         return self
 
@@ -197,7 +193,7 @@ class SplitApproval(StrictModel):
     decision: ApprovalDecision
     actor_identifier: str = Field(min_length=1, max_length=160)
     actor_type: ApprovalActorType
-    decision_reason: str = Field(min_length=1, max_length=1000)
+    decision_reason: str | None = Field(default=None, max_length=1000)
     decided_at: datetime
     repository_snapshot_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     profile_id: str
@@ -206,12 +202,24 @@ class SplitApproval(StrictModel):
     applied_revision_number: int | None = Field(default=None, ge=1)
     application_status: ApplicationStatus
 
-    @field_validator("actor_identifier", "decision_reason")
+    @field_validator("actor_identifier")
     @classmethod
-    def printable(cls, value: str) -> str:
+    def printable_actor(cls, value: str) -> str:
         if any(ord(character) < 32 for character in value):
             raise ValueError("approval actor and reason must not contain control characters")
-        return value.strip()
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("approval actor must not be blank")
+        return normalized
+
+    @field_validator("decision_reason")
+    @classmethod
+    def printable_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if any(ord(character) < 32 for character in value):
+            raise ValueError("approval actor and reason must not contain control characters")
+        return value.strip() or None
 
     @model_validator(mode="after")
     def validate_approval(self) -> "SplitApproval":

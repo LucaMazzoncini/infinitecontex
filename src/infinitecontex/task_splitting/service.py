@@ -113,6 +113,7 @@ class TaskSplittingService:
         rules: dict[str, SplitRule] = {}
         barrier_keys: set[str] = set()
         inputs, created = self._split_once(inputs, source_input, 1)
+        direct_child_count = len(created)
         barrier_keys.add(source_input.task_key)
         for child in created:
             depths[child.task_key] = 1
@@ -121,9 +122,7 @@ class TaskSplittingService:
 
         transient, fits = self._fit_inputs(source, inputs, repository_root, model_name, digest, barrier_keys)
         while True:
-            oversized = [
-                item for item in fits if item.decision == TaskContextDecision.SPLIT_REQUIRED
-            ]
+            oversized = [item for item in fits if item.decision == TaskContextDecision.SPLIT_REQUIRED]
             if not oversized:
                 break
             target_analysis = sorted(oversized, key=lambda item: item.task_id)[0]
@@ -143,9 +142,7 @@ class TaskSplittingService:
                 rules[child.task_key] = SplitRule.REQUIRED_CONTEXT_GROUP
             if len(depths) > self.policy.maximum_descendants:
                 raise SplitBoundsError("Recursive split exceeded the descendant limit; narrow the source task")
-            transient, fits = self._fit_inputs(
-                source, inputs, repository_root, model_name, digest, barrier_keys
-            )
+            transient, fits = self._fit_inputs(source, inputs, repository_root, model_name, digest, barrier_keys)
 
         failures = [item for item in fits if item.decision not in _PASSING]
         if failures:
@@ -193,9 +190,8 @@ class TaskSplittingService:
             model_digest=analysis.model_digest,
             originating_analysis_id=analysis.analysis_id,
             originating_analysis_fingerprint=analysis.semantic_fingerprint,
-            eligibility=(
-                SplitEligibility.ELIGIBLE_WITH_WARNINGS if optional else SplitEligibility.ELIGIBLE
-            ),
+            source_context_fit=analysis,
+            eligibility=(SplitEligibility.ELIGIBLE_WITH_WARNINGS if optional else SplitEligibility.ELIGIBLE),
             optional_proposal=optional,
             selected_rule=SplitRule.REQUIRED_CONTEXT_GROUP,
             rule_candidates=(
@@ -216,6 +212,7 @@ class TaskSplittingService:
             proposed_plan=proposed_plan,
             resulting_graph_fingerprint=transient.graph_fingerprint,
             resulting_task_count=transient.task_count,
+            direct_child_count=direct_child_count,
             total_leaf_tasks=len(children),
             maximum_split_depth=max(depths.values()),
             every_leaf_fits=True,
@@ -243,38 +240,77 @@ class TaskSplittingService:
         repository_root: Path,
         *,
         actor_identifier: str,
-        decision_reason: str,
+        decision_reason: str | None = None,
         warnings_acknowledged: bool = False,
     ) -> tuple[PlanRevision, SplitApproval]:
         proposal = self.store.load_proposal(plan_id, proposal_id)
-        current = self.planning.store.load_current(plan_id)
-        if (
-            current.current_revision != proposal.source_plan_revision
-            or current.revision_fingerprint != proposal.source_revision_fingerprint
-            or current.graph_fingerprint != proposal.source_graph_fingerprint
-        ):
-            raise SplitProposalStaleError("Plan changed after the split proposal; recreate the proposal")
-        snapshot = self.context.inventory_service.build(repository_root).snapshot
-        if snapshot.semantic_fingerprint != proposal.repository_snapshot_fingerprint:
-            raise SplitProposalStaleError("Repository changed after the split proposal; recreate the proposal")
+        self._ensure_no_prior_decision(proposal)
         if proposal.warnings and not warnings_acknowledged:
             raise SplitApprovalError("Proposal has warnings; review and explicitly acknowledge them")
+        self._revalidate_application(proposal, repository_root)
+        provisional = self._approval(
+            proposal,
+            actor_identifier=actor_identifier,
+            decision=ApprovalDecision.APPROVED,
+            decision_reason=decision_reason,
+            warnings_acknowledged=warnings_acknowledged,
+            applied_revision_number=proposal.source_plan_revision + 1,
+        )
         revision, report, persisted = self.planning.import_plan(
             proposal.proposed_plan,
             revision_reason=f"Approved split proposal {proposal.proposal_id}",
             revision_author=PlannerProvenance.HUMAN_AUTHORED,
         )
-        if not persisted or not report.valid:
+        if (
+            not persisted
+            or not report.valid
+            or revision.current_revision != proposal.source_plan_revision + 1
+            or revision.graph_fingerprint != proposal.resulting_graph_fingerprint
+        ):
             raise SplitApprovalError("Approved split did not create a valid new plan revision")
+        self.store.save_approval(provisional)
+        return revision, provisional
+
+    def reject(
+        self,
+        plan_id: str,
+        proposal_id: str,
+        *,
+        actor_identifier: str,
+        decision_reason: str | None = None,
+    ) -> SplitApproval:
+        proposal = self.store.load_proposal(plan_id, proposal_id)
+        self._ensure_no_prior_decision(proposal)
+        approval = self._approval(
+            proposal,
+            actor_identifier=actor_identifier,
+            decision=ApprovalDecision.REJECTED,
+            decision_reason=decision_reason,
+            warnings_acknowledged=False,
+            applied_revision_number=None,
+        )
+        self.store.save_approval(approval)
+        return approval
+
+    def _approval(
+        self,
+        proposal: SplitProposal,
+        *,
+        actor_identifier: str,
+        decision: ApprovalDecision,
+        decision_reason: str | None,
+        warnings_acknowledged: bool,
+        applied_revision_number: int | None,
+    ) -> SplitApproval:
         provisional = SplitApproval(
             approval_id="split-approval-" + "0" * 24,
             approval_fingerprint="0" * 64,
             proposal_id=proposal.proposal_id,
             proposal_fingerprint=proposal.semantic_fingerprint,
-            plan_id=plan_id,
+            plan_id=proposal.plan_id,
             source_revision=proposal.source_plan_revision,
             proposed_graph_fingerprint=proposal.resulting_graph_fingerprint,
-            decision=ApprovalDecision.APPROVED,
+            decision=decision,
             actor_identifier=actor_identifier,
             actor_type=ApprovalActorType.HUMAN,
             decision_reason=decision_reason,
@@ -283,18 +319,95 @@ class TaskSplittingService:
             profile_id=proposal.profile_id,
             model_digest=proposal.model_digest,
             warnings_acknowledged=warnings_acknowledged,
-            applied_revision_number=revision.current_revision,
-            application_status=ApplicationStatus.APPLIED,
+            applied_revision_number=applied_revision_number,
+            application_status=(
+                ApplicationStatus.APPLIED if applied_revision_number is not None else ApplicationStatus.NOT_APPLIED
+            ),
         )
         fingerprint = approval_fingerprint(provisional)
-        approval = provisional.model_copy(
+        return provisional.model_copy(
             update={
                 "approval_id": f"split-approval-{fingerprint[:24]}",
                 "approval_fingerprint": fingerprint,
             }
         )
-        self.store.save_approval(approval)
-        return revision, approval
+
+    def _ensure_no_prior_decision(self, proposal: SplitProposal) -> None:
+        existing = tuple(
+            item for item in self.store.list_approvals(proposal.plan_id) if item.proposal_id == proposal.proposal_id
+        )
+        if existing:
+            raise SplitApprovalError(
+                f"Proposal {proposal.proposal_id} already has decision "
+                f"{existing[0].decision.value}; duplicate decisions are not allowed"
+            )
+
+    def _revalidate_application(self, proposal: SplitProposal, repository_root: Path) -> None:
+        current = self.planning.store.load_current(proposal.plan_id)
+        if (
+            current.current_revision != proposal.source_plan_revision
+            or current.revision_fingerprint != proposal.source_revision_fingerprint
+            or current.graph_fingerprint != proposal.source_graph_fingerprint
+        ):
+            raise SplitProposalStaleError("Plan changed after the split proposal; recreate the proposal")
+        source_task = _task_by_id(current, proposal.source_task_id)
+        if source_task.task_fingerprint != proposal.source_task_fingerprint:
+            raise SplitProposalStaleError("Source task changed after the split proposal; recreate the proposal")
+        if (
+            not proposal.contract_coverage.complete
+            or not proposal.every_leaf_fits
+            or not proposal.validation_passed
+            or proposal.errors
+        ):
+            raise SplitApprovalError("Proposal is incomplete or invalid; regenerate it before approval")
+
+        profile = self.context.profile_store.find_by_id(proposal.profile_id)
+        if profile.model_identity.model_digest != proposal.model_digest:
+            raise SplitProposalStaleError("Model profile or digest changed; recreate the proposal")
+        snapshot = self.context.inventory_service.build(repository_root).snapshot
+        if snapshot.semantic_fingerprint != proposal.repository_snapshot_fingerprint:
+            raise SplitProposalStaleError("Repository changed after the split proposal; recreate the proposal")
+        model_name = profile.model_identity.model_name
+        source_analysis = self.context.context_fit(
+            proposal.plan_id,
+            repository_root,
+            model_name=model_name,
+            digest=proposal.model_digest,
+            task_id=proposal.source_task_id,
+            persist=False,
+        )[0]
+        if source_analysis.semantic_fingerprint != proposal.originating_analysis_fingerprint:
+            raise SplitProposalStaleError(
+                "Source context analysis changed after the split proposal; recreate the proposal"
+            )
+        if (
+            proposal.source_context_fit is None
+            or proposal.source_context_fit.semantic_fingerprint != proposal.originating_analysis_fingerprint
+        ):
+            raise SplitProposalStaleError("Proposal lacks the verified source context analysis; recreate the proposal")
+
+        transient, report = self.planning.validate(proposal.proposed_plan)
+        if (
+            not report.valid
+            or transient.graph_fingerprint != proposal.resulting_graph_fingerprint
+            or transient.task_count != proposal.resulting_task_count
+        ):
+            raise SplitProposalStaleError("Proposed task DAG changed; recreate the proposal")
+        leaf_ids = tuple(item.proposed_task_id for item in proposal.proposed_children)
+        current_leaf_fits = self.context.context_fit_revision(
+            transient,
+            repository_root,
+            model_name=model_name,
+            digest=proposal.model_digest,
+            task_ids=leaf_ids,
+            persist=False,
+        )
+        expected = {item.proposed_task_id: item.context_fit.semantic_fingerprint for item in proposal.proposed_children}
+        actual = {item.task_id: item.semantic_fingerprint for item in current_leaf_fits}
+        if expected != actual or any(not item.passing for item in current_leaf_fits):
+            raise SplitProposalStaleError(
+                "One or more leaf context analyses changed or no longer fit; recreate the proposal"
+            )
 
     def _split_once(
         self, inputs: list[TaskInput], parent: TaskInput, depth: int
@@ -337,9 +450,7 @@ class TaskSplittingService:
         transient, report = self.planning.validate(_source_plan_input(source, tuple(inputs)))
         if not report.valid:
             raise SplitEligibilityError("Deterministic split produced an invalid task DAG")
-        leaf_ids = tuple(
-            task.task_id for task in transient.tasks if task.task_key not in barrier_keys
-        )
+        leaf_ids = tuple(task.task_id for task in transient.tasks if task.task_key not in barrier_keys)
         fits = self.context.context_fit_revision(
             transient,
             repository_root,
@@ -360,16 +471,12 @@ def _partition_units(context: ContextRequirements) -> tuple[tuple[str, Any], ...
     )
 
 
-def _bounded_groups(
-    units: tuple[tuple[str, Any], ...], maximum: int
-) -> tuple[tuple[tuple[str, Any], ...], ...]:
+def _bounded_groups(units: tuple[tuple[str, Any], ...], maximum: int) -> tuple[tuple[tuple[str, Any], ...], ...]:
     count = min(len(units), maximum)
     return tuple(tuple(units[index::count]) for index in range(count))
 
 
-def _child(
-    parent: TaskInput, units: tuple[tuple[str, Any], ...], index: int, depth: int
-) -> TaskInput:
+def _child(parent: TaskInput, units: tuple[tuple[str, Any], ...], index: int, depth: int) -> TaskInput:
     context_payload = parent.context_requirements.model_dump(mode="python")
     for field in _PARTITION_FIELDS:
         context_payload[field] = tuple(value for name, value in units if name == field)
@@ -502,9 +609,7 @@ def _dependency_rewrites(
         DependencyRewrite(
             dependent_task_key=child.stable_child_key,
             old_dependency_key=task.task_key,
-            new_dependency_keys=tuple(
-                item.task_key for item in source.tasks if item.task_id in task.dependency_ids
-            ),
+            new_dependency_keys=tuple(item.task_key for item in source.tasks if item.task_id in task.dependency_ids),
             kind="incoming",
         )
         for child in children

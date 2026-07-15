@@ -28,6 +28,11 @@ class TaskSplitStore:
         if proposal_fingerprint(value) != value.semantic_fingerprint:
             raise SplitPersistenceError("Split proposal fingerprint is invalid; recreate it")
         target = self._directory(value.plan_id, "proposals") / f"{value.proposal_id}.json"
+        if target.exists():
+            existing = self.load_proposal(value.plan_id, value.proposal_id)
+            if existing.semantic_fingerprint == value.semantic_fingerprint:
+                return target
+            raise SplitPersistenceError(f"Split proposal ID {value.proposal_id} already exists with different content")
         return self._save(target, value)
 
     def load_proposal(self, plan_id: str, record_id: str) -> SplitProposal:
@@ -60,6 +65,12 @@ class TaskSplitStore:
             return ()
         return tuple(self.load_proposal(plan_id, path.stem) for path in sorted(directory.glob("*.json")))
 
+    def list_approvals(self, plan_id: str) -> tuple[SplitApproval, ...]:
+        directory = self._directory(plan_id, "approvals")
+        if not directory.exists():
+            return ()
+        return tuple(self.load_approval(plan_id, path.stem) for path in sorted(directory.glob("*.json")))
+
     def _directory(self, plan_id: str, kind: str) -> Path:
         return self.plans_directory / plan_id / "splits" / kind
 
@@ -70,9 +81,7 @@ class TaskSplitStore:
         try:
             return model.model_validate(orjson.loads(path.read_bytes()))
         except (OSError, orjson.JSONDecodeError, ValidationError, ValueError) as exc:
-            raise SplitPersistenceError(
-                "Stored split record is malformed; move it aside and recreate it"
-            ) from exc
+            raise SplitPersistenceError("Stored split record is malformed; move it aside and recreate it") from exc
 
     @staticmethod
     def _save(target: Path, value: BaseModel) -> Path:
@@ -91,13 +100,9 @@ class TaskSplitStore:
             try:
                 os.link(temporary, target)
             except FileExistsError as exc:
-                raise SplitPersistenceError(
-                    f"Split record {target.stem} already exists and is immutable"
-                ) from exc
+                raise SplitPersistenceError(f"Split record {target.stem} already exists and is immutable") from exc
             except OSError as exc:
-                raise SplitPersistenceError(
-                    f"Could not persist immutable split record: {exc}"
-                ) from exc
+                raise SplitPersistenceError(f"Could not persist immutable split record: {exc}") from exc
         finally:
             temporary.unlink(missing_ok=True)
         return target

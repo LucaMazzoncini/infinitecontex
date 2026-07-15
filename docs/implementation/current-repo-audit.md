@@ -1,5 +1,15 @@
 # Current Repository Audit
 
+## M3 F6 compact split proposal and approval CLI
+
+F6 exposes the existing `task_splitting/` services through additive `plan split`, `plan split-proposal list/show`, `plan approve-split`, `plan reject-split`, and `plan approval list/show` commands. The CLI constructs only the existing planning, task-context, profile-store, and split services; it does not construct Ollama, use network access, execute tasks, edit repository source, grant capabilities, or change a plan during proposal creation or inspection.
+
+The compact proposal view includes source revision/task and fit, rationale, selected rule, direct and leaf counts, depth, each leaf fit and token use, child scopes, criterion/evidence coverage, dependency rewrites, requested capabilities, warnings/errors, all-leaves-fit status, and the resulting task-count/graph preview. `--json` returns the complete persisted contract. Approval requires exact plan/proposal IDs and a nonblank human actor, binds the verified proposal fingerprint, rejects duplicate decisions, and revalidates revision, graph, source task, snapshot, exact profile/digest, source/leaf analyses, coverage, fit, and final DAG before one new immutable revision is written. Rejection persists a decision without revising the plan.
+
+Pre-change F6 baseline on 2026-07-15: `ruff format --check .` exited 1 and identified five already committed files (`task_context/service.py` plus four `task_splitting/` files); `ruff check .` exited 0; strict mypy exited 0 for 105 source files; all 222 tests passed with 91% total coverage; and `uv build` exited 0. F6 includes only the mechanical formatter output needed to make the required format gate pass.
+
+Post-change F6 gates on 2026-07-15: `ruff format --check .`, `ruff check .`, strict mypy for 105 source files, all 228 tests with 91% total coverage, `uv build`, and `git diff --check` each exited 0. The dedicated three-test CLI smoke suite covers human/JSON proposal output, list/show, approval, rejection, exactly one approved revision, historical preservation, stale-proposal refusal, no source modification, offline Ollama-construction refusal, and the module entrypoint.
+
 ## M3 E2 deterministic task-context reconciliation
 
 The requested repository-scanning material maps locally to `03_REPOSITORY_SCANNING.md`; context budgeting and packing map to `08_CONTEXT_BUDGET_GOVERNOR.md` and `09_RETRIEVAL_AND_CONTEXT_PACKS.md`. There is no standalone knowledge-graph specification, so `06_DOMAIN_MODEL.md` plus the existing `graph/` package remain authoritative. Token estimation is governed by ADR 0002, deterministic budget calculation by ADR 0003, ranking/packing by ADR 0004, runtime admission by ADR 0006, and strict plans by ADR 0007.
