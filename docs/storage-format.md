@@ -17,5 +17,9 @@ Strict task-DAG plans are stored separately from legacy captured task strings un
 - `prompts/*.md`: compiled prompt outputs.
 - `exports/*.tgz`: portable exports.
 - `model-profiles/*.json`: schema-versioned, digest-bound model identities and conservative operational budgets. Files are deterministically serialized and atomically replaced.
+- `plans/<plan-id>/analyses/<revision>/task-context/task-context-<fingerprint>.json`: immutable compact task-context analyses linked to the exact plan revision, repository snapshot, profile digest, estimator, ranking, packing, and policy identities.
+- `plans/<plan-id>/analyses/<revision>/task-context/current/<task-id>.json`: atomically replaced pointer to the latest analysis for that task and revision.
+
+Task-context records use sorted deterministic JSON and do not duplicate full source by default. Malformed, unsupported-schema, fingerprint-mismatched, or pointer-mismatched data fails closed. Plan revisions are never changed by analysis persistence. Repository content, task, profile, estimator, ranking, packing, or resolution-policy changes make an older analysis stale; stale records remain inspectable and are not silently deleted.
 
 Export format: gzip tarball containing only `.infctx/`, allowing direct import on another machine.

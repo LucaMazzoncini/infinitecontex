@@ -172,6 +172,16 @@ infctx plan list
 
 Plan import persists declarations and immutable revisions only. It never invokes Ollama, grants capabilities, or executes tasks.
 
+Explicit plan paths and Python symbols can be resolved and checked against an exact persisted model profile entirely offline:
+
+```powershell
+infctx plan resolve PLAN_ID --repo .
+infctx plan context-fit PLAN_ID --model qwen3.6:35b --digest sha256:EXACT_DIGEST
+infctx plan context-analysis list PLAN_ID
+```
+
+Resolution freezes bounded repository content, reports every required and optional reference, and rejects traversal or unsafe links. Context fit uses verified operational limits rather than advertised capacity and provides deterministic narrowing or split recommendations without rewriting or executing the plan. It is inspection only and is distinct from runtime request admission.
+
 | Command | Purpose |
 | --- | --- |
 | `infctx init` | Create `.infctx/` and initialize local metadata |
@@ -195,6 +205,9 @@ Plan import persists declarations and immutable revisions only. It never invokes
 | `infctx export` / `import` | Move local memory between machines |
 | `infctx cleanup` | Prune old snapshots and compact storage |
 | `infctx setup-agent` | Wire Cursor, Claude, Copilot, or Windsurf to `.infctx/agents/` |
+| `infctx plan resolve` | Resolve explicit plan paths and symbols against a repository snapshot |
+| `infctx plan context-fit` | Inspect whether declared task context fits an exact persisted profile |
+| `infctx plan context-analysis` | List or show persisted task-context analyses |
 
 Global options:
 
@@ -220,6 +233,8 @@ Infinite Context keeps generated files inside `.infctx/`:
   metadata/
     state.db
   prompts/
+  plans/
+    PLAN_ID/analyses/REVISION/task-context/
   snapshots/
   working_set/
 ```

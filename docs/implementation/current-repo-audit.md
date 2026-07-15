@@ -1,5 +1,11 @@
 # Current Repository Audit
 
+## M3 E2 deterministic task-context reconciliation
+
+The requested repository-scanning material maps locally to `03_REPOSITORY_SCANNING.md`; context budgeting and packing map to `08_CONTEXT_BUDGET_GOVERNOR.md` and `09_RETRIEVAL_AND_CONTEXT_PACKS.md`. There is no standalone knowledge-graph specification, so `06_DOMAIN_MODEL.md` plus the existing `graph/` package remain authoritative. Token estimation is governed by ADR 0002, deterministic budget calculation by ADR 0003, ranking/packing by ADR 0004, runtime admission by ADR 0006, and strict plans by ADR 0007.
+
+M3 E2 adds `task_context/` for repository snapshots, bounded inventory, safe path resolution, pluggable symbol resolution, Python AST indexing, scope validation, explicit candidate construction, fit orchestration, typed errors, and analysis persistence. It reuses `planning/`, `model_profiles/`, `context_budget/`, `context_packing/`, `context_admission/` policy semantics, manifest storage, and atomic JSON writes. CLI additions are `plan resolve`, `plan context-fit`, and `plan context-analysis list/show`. No LLM, Ollama access, network operation, source import, execution, retrieval, editing, capability grant, or automatic task split is part of this slice.
+
 ## M3 E1 strict-planning reconciliation
 
 The requested task-decomposition specification maps locally to `10_TASK_PLANNING_AND_DECOMPOSITION.md`; no standalone task-persistence document exists. Domain and storage authority is distributed across `06_DOMAIN_MODEL.md`, `05_ARCHITECTURE_EVOLUTION.md`, `storage/layout.py`, and the established atomic JSON stores. M3 E1 therefore adds an independent `planning/` package and `.infctx/plans/` layout instead of placing execution semantics into the existing generic knowledge graph.

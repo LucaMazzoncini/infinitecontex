@@ -84,3 +84,33 @@ infctx plan ready PLAN_ID
 ```
 
 These commands never execute tasks or grant requested capabilities.
+
+## Structured task context
+
+`context_requirements` accepts legacy string lists and typed `path_references` and `symbol_references`. Only explicit declarations become repository candidates.
+
+```json
+{
+  "context_requirements": {
+    "path_references": [
+      {"value": "src\\infinitecontex\\cli.py", "kind": "exact_file", "requirement": "required"},
+      {"value": "docs/*.md", "kind": "glob", "requirement": "optional"},
+      {"value": "src/infinitecontex/task_context/service.py", "kind": "source_range", "line_start": 1, "line_end": 80}
+    ],
+    "symbol_references": [
+      {"reference": "TaskContextService.context_fit", "language": "python", "symbol_name": "context_fit", "qualified_name": "TaskContextService.context_fit", "file_hint": "src/infinitecontex/task_context/service.py", "symbol_kind": "method"}
+    ]
+  }
+}
+```
+
+An unqualified Python name with matches in multiple modules is `ambiguous`. A C# symbol is `unsupported_language` until a Roslyn adapter exists, although an exact `.cs` file remains usable. `../outside.py`, UNC/device paths, drive changes, and absolute paths outside the repository are rejected as unsafe rather than rewritten.
+
+Required unresolved declarations prevent a passing fit. Optional unresolved declarations remain warnings. Context inspection never rewrites the plan:
+
+```powershell
+infctx plan resolve PLAN_ID --repo . --json
+infctx plan context-fit PLAN_ID --model MODEL --digest sha256:EXACT_DIGEST
+```
+
+A successful result reports `fits_target`, `fits_with_warning`, or `fits_hard_limit`. Oversized mandatory context reports `split_required`; missing required files report `required_reference_unresolved`. Remediation is deterministic advice only.

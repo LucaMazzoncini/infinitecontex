@@ -165,6 +165,78 @@ class DeclaredData(StrictModel):
     reference: str | None = Field(default=None, max_length=1000)
 
 
+class ContextPathDeclaration(StrictModel):
+    value: ScopeText
+    kind: Literal[
+        "exact_file",
+        "exact_directory",
+        "glob",
+        "test_file",
+        "documentation_file",
+        "configuration_file",
+        "source_range",
+        "logical_scope",
+    ] = "exact_file"
+    requirement: Literal["required", "optional", "forbidden"] = "required"
+    line_start: int | None = Field(default=None, ge=1)
+    line_end: int | None = Field(default=None, ge=1)
+    expected_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    expected_repository_snapshot: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    language_hint: str | None = Field(default=None, max_length=100)
+    logical_label: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_path_declaration(self) -> "ContextPathDeclaration":
+        _validate_scope(self.value)
+        if (self.line_start is None) != (self.line_end is None):
+            raise ValueError("source ranges require both line_start and line_end")
+        if self.line_start is not None and self.line_end is not None and self.line_end < self.line_start:
+            raise ValueError("line_end cannot precede line_start")
+        if self.kind == "source_range" and self.line_start is None:
+            raise ValueError("source_range declarations require a line range")
+        if self.kind not in {"glob", "logical_scope"} and any(value in self.value for value in "*?["):
+            raise ValueError("wildcards require a glob or logical_scope declaration")
+        return self
+
+
+class ContextSymbolDeclaration(StrictModel):
+    reference: ShortText
+    language: ShortText
+    symbol_name: ShortText
+    qualified_name: str | None = Field(default=None, max_length=1000)
+    file_hint: ScopeText | None = None
+    module_or_namespace: str | None = Field(default=None, max_length=1000)
+    symbol_kind: Literal[
+        "module",
+        "namespace",
+        "class",
+        "interface",
+        "enum",
+        "function",
+        "method",
+        "property",
+        "field",
+        "constant",
+        "test",
+        "unknown",
+    ] = "unknown"
+    signature_hint: str | None = Field(default=None, max_length=1000)
+    line_start: int | None = Field(default=None, ge=1)
+    line_end: int | None = Field(default=None, ge=1)
+    requirement: Literal["required", "optional", "forbidden"] = "required"
+    expected_symbol_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_symbol_declaration(self) -> "ContextSymbolDeclaration":
+        if self.file_hint is not None:
+            _validate_scope(self.file_hint)
+        if (self.line_start is None) != (self.line_end is None):
+            raise ValueError("symbol ranges require both line_start and line_end")
+        if self.line_start is not None and self.line_end is not None and self.line_end < self.line_start:
+            raise ValueError("line_end cannot precede line_start")
+        return self
+
+
 class ContextRequirements(StrictModel):
     required_files: tuple[ScopeText, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
     required_symbols: tuple[ShortText, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
@@ -174,12 +246,24 @@ class ContextRequirements(StrictModel):
     required_diagnostics: tuple[ShortText, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
     required_documentation: tuple[ScopeText, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
     required_conversation_refs: tuple[Identifier, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
+    optional_files: tuple[ScopeText, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
+    optional_symbols: tuple[ShortText, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
+    optional_tests: tuple[ShortText, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
+    optional_documentation: tuple[ScopeText, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
+    optional_decisions: tuple[Identifier, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
+    optional_task_outputs: tuple[Identifier, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
+    path_references: tuple[ContextPathDeclaration, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
+    symbol_references: tuple[ContextSymbolDeclaration, ...] = Field(default=(), max_length=MAX_CONTEXT_REFERENCES)
     expected_context_class: ContextClass = ContextClass.UNKNOWN
     maximum_context_tokens: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def validate_total_references(self) -> "ContextRequirements":
-        total = sum(len(value) for name, value in self if name.startswith("required_"))
+        total = sum(
+            len(value)
+            for name, value in self
+            if name.startswith(("required_", "optional_")) or name in {"path_references", "symbol_references"}
+        )
         if total > MAX_CONTEXT_REFERENCES:
             raise ValueError(f"context references exceed the limit of {MAX_CONTEXT_REFERENCES}")
         return self

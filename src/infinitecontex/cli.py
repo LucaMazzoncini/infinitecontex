@@ -34,6 +34,7 @@ from infinitecontex.planning.models import PlanInput, PlanRevision, PlanValidati
 from infinitecontex.planning.service import PlanningService
 from infinitecontex.service import InfiniteContextService
 from infinitecontex.storage.layout import build_layout
+from infinitecontex.task_context.service import TaskContextService
 from infinitecontex.version import __version__
 
 app = typer.Typer(help="Infinite Context: local-first project memory engine", invoke_without_command=True)
@@ -44,6 +45,7 @@ context_app = typer.Typer(help="Rank and pack explicit context candidates")
 manifest_app = typer.Typer(help="Inspect persisted context manifests")
 admission_app = typer.Typer(help="Inspect compact context admission records")
 plan_app = typer.Typer(help="Validate and inspect strict persisted task DAGs")
+context_analysis_app = typer.Typer(help="Inspect persisted task-context analyses")
 ESTIMATE_TEXT_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 CONTEXT_CANDIDATE_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 model_app.add_typer(profile_app, name="profile")
@@ -53,6 +55,7 @@ context_app.add_typer(manifest_app, name="manifest")
 context_app.add_typer(admission_app, name="admission")
 app.add_typer(context_app, name="context")
 app.add_typer(plan_app, name="plan")
+plan_app.add_typer(context_analysis_app, name="context-analysis")
 console = Console()
 _global_project_root: Path | None = None
 
@@ -127,6 +130,24 @@ def _planning_service(project_root: Path | None) -> PlanningService:
 
     layout = build_layout(_effective_project_root(project_root))
     return PlanningService(PlanStore(layout.plans))
+
+
+def _task_context_service(project_root: Path | None) -> TaskContextService:
+    from infinitecontex.planning.store import PlanStore
+    from infinitecontex.task_context.repository import RepositoryInventoryService
+    from infinitecontex.task_context.store import TaskContextAnalysisStore
+
+    root = _effective_project_root(project_root)
+    layout = build_layout(root)
+    cfg = load_app_config(root)
+    return TaskContextService(
+        PlanStore(layout.plans),
+        ModelProfileStore(layout.model_profiles),
+        ContextBudgetCalculator(cfg.context_budget.warning_threshold_basis_points),
+        RepositoryInventoryService(),
+        TaskContextAnalysisStore(layout.plans),
+        ContextManifestStore(layout.context_manifests),
+    )
 
 
 @plan_app.command("validate")
@@ -285,6 +306,120 @@ def plan_ready(
         if task.task_id in ready_ids
     ]
     _emit(payload, json, "plan_ready")
+
+
+@plan_app.command("resolve")
+def plan_resolve(
+    plan_id: Annotated[str, typer.Argument()],
+    task: Annotated[str | None, typer.Option("--task")] = None,
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    repo: Annotated[Path | None, typer.Option("--repo", help="Local repository to inspect")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Resolve explicit task path and symbol declarations without packing."""
+    repository_root = (repo or Path.cwd()).resolve()
+    plan, inventory, reports = cast(
+        tuple[PlanRevision, object, tuple[object, ...]],
+        _run_action(
+            lambda: _task_context_service(project_root).resolve_plan(
+                plan_id,
+                repository_root,
+                revision=revision,
+                task_id=task,
+            ),
+            emit=False,
+        ),
+    )
+    payload = {
+        "plan_id": plan.plan_id,
+        "revision": plan.current_revision,
+        "repository_snapshot": getattr(inventory, "snapshot").model_dump(mode="json"),
+        "reports": [getattr(item, "model_dump")(mode="json") for item in reports],
+    }
+    _emit(payload, json, "task_resolution")
+
+
+@plan_app.command("context-fit")
+def plan_context_fit(
+    plan_id: Annotated[str, typer.Argument()],
+    model: Annotated[str | None, typer.Option("--model")] = None,
+    digest: Annotated[str | None, typer.Option("--digest")] = None,
+    task: Annotated[str | None, typer.Option("--task")] = None,
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    repo: Annotated[Path | None, typer.Option("--repo", help="Local repository to inspect")] = None,
+    persist: Annotated[bool, typer.Option("--persist/--no-persist")] = True,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Resolve, freeze, pack, and inspect declared task context offline."""
+    repository_root = (repo or Path.cwd()).resolve()
+    from infinitecontex.task_context.models import TaskContextAnalysis
+
+    analyses = cast(
+        tuple[TaskContextAnalysis, ...],
+        _run_action(
+            lambda: _task_context_service(project_root).context_fit(
+                plan_id,
+                repository_root,
+                model_name=model,
+                digest=digest,
+                revision=revision,
+                task_id=task,
+                persist=persist,
+            ),
+            emit=False,
+        ),
+    )
+    payload = [item.model_dump(mode="json") for item in analyses]
+    _emit(payload, json, "task_context_analyses")
+    if any(not item.passing for item in analyses):
+        raise typer.Exit(2)
+
+
+@context_analysis_app.command("list")
+def plan_context_analysis_list(
+    plan_id: Annotated[str, typer.Argument()],
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    service = _task_context_service(project_root)
+    selected_revision = revision or service.plan_store.load_current(plan_id).current_revision
+    analyses = cast(
+        list[object],
+        _run_action(lambda: service.analysis_store.list(plan_id, selected_revision), emit=False),
+    )
+    payload = [getattr(item, "model_dump")(mode="json") for item in analyses]
+    _emit(payload, json, "task_context_analyses")
+
+
+@context_analysis_app.command("show")
+def plan_context_analysis_show(
+    plan_id: Annotated[str, typer.Argument()],
+    analysis_id: Annotated[str, typer.Argument()],
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    repo: Annotated[Path | None, typer.Option("--repo", help="Repository used for staleness check")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    service = _task_context_service(project_root)
+    selected_revision = revision or service.plan_store.load_current(plan_id).current_revision
+    from infinitecontex.task_context.models import TaskContextAnalysis
+
+    analysis = cast(
+        TaskContextAnalysis,
+        _run_action(
+            lambda: service.analysis_store.load(plan_id, selected_revision, analysis_id),
+            emit=False,
+        ),
+    )
+    repository_root = (repo or Path.cwd()).resolve()
+    payload = {
+        "analysis": analysis.model_dump(mode="json"),
+        "staleness": service.staleness(analysis, repository_root).model_dump(mode="json"),
+    }
+    _emit(payload, json, "task_context_analysis")
 
 
 @context_app.command("admit")
@@ -889,6 +1024,46 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                 "enforcement": payload.get("enforcement", ""),
             }
             console.print(_format_dict(summary, "Context Packing Manifest"))
+        elif format_type == "task_resolution":
+            reports = payload.get("reports", [])
+            snapshot = payload.get("repository_snapshot", {})
+            path_lines: list[str] = []
+            symbol_lines: list[str] = []
+            if isinstance(reports, list):
+                for report in reports:
+                    if not isinstance(report, dict):
+                        continue
+                    path_lines.extend(
+                        f"{item.get('reference', {}).get('original_value')}: {item.get('outcome')}"
+                        for item in report.get("path_resolutions", [])
+                        if isinstance(item, dict) and isinstance(item.get("reference"), dict)
+                    )
+                    symbol_lines.extend(
+                        f"{item.get('reference', {}).get('original_reference')}: {item.get('outcome')}"
+                        for item in report.get("symbol_resolutions", [])
+                        if isinstance(item, dict) and isinstance(item.get("reference"), dict)
+                    )
+            summary = {
+                "plan_id": payload.get("plan_id", ""),
+                "revision": payload.get("revision", ""),
+                "snapshot": snapshot.get("snapshot_id", "") if isinstance(snapshot, dict) else "",
+                "repository_dirty": snapshot.get("dirty", "") if isinstance(snapshot, dict) else "",
+                "paths": path_lines,
+                "symbols": symbol_lines,
+            }
+            console.print(_format_dict(summary, "Task Context Resolution"))
+        elif format_type == "task_context_analysis":
+            analysis = payload.get("analysis", {})
+            staleness = payload.get("staleness", {})
+            summary = {
+                "analysis_id": analysis.get("analysis_id", "") if isinstance(analysis, dict) else "",
+                "decision": analysis.get("decision", "") if isinstance(analysis, dict) else "",
+                "packed_tokens": analysis.get("packed_token_total", 0) if isinstance(analysis, dict) else 0,
+                "remaining_tokens": analysis.get("remaining_input_tokens", 0) if isinstance(analysis, dict) else 0,
+                "stale": staleness.get("stale", "") if isinstance(staleness, dict) else "",
+                "stale_reasons": staleness.get("reasons", []) if isinstance(staleness, dict) else [],
+            }
+            console.print(_format_dict(summary, "Task Context Analysis"))
         elif format_type == "ingest_chat":
             summary = {
                 "developer_goal": payload.get("developer_goal", ""),
@@ -1131,6 +1306,32 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                         str(item.get("remaining_tokens", 0)),
                     )
                 console.print(Panel(table, title="[bold]Context Manifests[/bold]", expand=False))
+        elif format_type == "task_context_analyses":
+            if not payload:
+                console.print("[dim]No task-context analyses found.[/dim]")
+            else:
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("Analysis")
+                table.add_column("Task")
+                table.add_column("Decision")
+                table.add_column("Packed", justify="right")
+                table.add_column("Remaining", justify="right")
+                table.add_column("Deficit", justify="right")
+                table.add_column("Excluded", justify="right")
+                table.add_column("Remediation")
+                for item in payload:
+                    remediation = item.get("remediation_actions", [])
+                    table.add_row(
+                        str(item.get("analysis_id", "")),
+                        str(item.get("task_id", "")),
+                        str(item.get("decision", "")),
+                        str(item.get("packed_token_total", 0)),
+                        str(item.get("remaining_input_tokens", 0)),
+                        str(item.get("token_deficit", 0)),
+                        str(len(item.get("excluded_candidates", []))),
+                        "; ".join(str(action.get("message", "")) for action in remediation if isinstance(action, dict)),
+                    )
+                console.print(Panel(table, title="[bold]Task Context Analyses[/bold]", expand=False))
         else:
             for item in payload:
                 console.print(item)

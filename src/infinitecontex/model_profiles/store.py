@@ -84,6 +84,14 @@ class ModelProfileStore:
             and profile.model_identity.normalized_model_name == normalized
         ]
 
+    def find_by_id(self, profile_id: str) -> ModelProfile:
+        matches = [profile for profile in self.list_profiles() if profile.profile_id == profile_id]
+        if not matches:
+            raise ModelProfileNotFoundError(f"No persisted model profile has ID {profile_id}")
+        if len(matches) > 1:
+            raise ModelProfileFormatError(f"Model profile ID {profile_id} is duplicated; move stale copies aside")
+        return matches[0]
+
     @staticmethod
     def serialize(profile: ModelProfile) -> bytes:
         return orjson.dumps(

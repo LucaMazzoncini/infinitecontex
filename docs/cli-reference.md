@@ -27,6 +27,10 @@ Structured workflow:
 - `infctx plan history PLAN_ID [--project-root PATH] [--json]`
 - `infctx plan graph PLAN_ID [--revision N] [--project-root PATH] [--json]`
 - `infctx plan ready PLAN_ID [--project-root PATH] [--json]`
+- `infctx plan resolve PLAN_ID [--task TASK_ID] [--revision N] [--repo PATH] [--project-root PATH] [--json]`
+- `infctx plan context-fit PLAN_ID [--model MODEL] [--digest DIGEST] [--task TASK_ID] [--revision N] [--repo PATH] [--persist/--no-persist] [--project-root PATH] [--json]`
+- `infctx plan context-analysis list PLAN_ID [--revision N] [--project-root PATH] [--json]`
+- `infctx plan context-analysis show PLAN_ID ANALYSIS_ID [--revision N] [--repo PATH] [--project-root PATH] [--json]`
 - `infctx context manifest list [--project-root PATH] [--json]`
 - `infctx context manifest show MANIFEST_ID [--project-root PATH] [--json]`
 - `infctx init [--project-root PATH] [--json]`
@@ -69,6 +73,9 @@ Notes:
 - `context admission list/show` inspect compact records under `.infctx/context-admissions/`; prompt content is not persisted.
 - `chat` remains read-only, but every turn now creates a deterministic manifest and passes through the fail-closed runtime admission gate before Ollama streaming. History is bounded and optional; system instructions and the current user request are mandatory and are never silently truncated. `/context` reports the active gate, digest, profile, latest manifest/admission, token budget, and reserves.
 - `plan validate` strictly analyzes JSON without persistence. `plan import` writes only a completely valid immutable revision. `list`, `show`, `history`, `graph`, and `ready` are offline inspection commands; none contacts Ollama or executes a task. The default plan-file limit is 8 MiB, and no input is silently repaired or truncated.
+- `plan resolve` inventories one local repository snapshot and reports every declared path and symbol outcome. `plan context-fit` freezes resolved source and reuses the existing estimator, operational budget calculator, ranker, and packer against an exact persisted digest-bound profile. Both commands are offline and read-only outside optional `.infctx` analysis/manifest persistence.
+- `plan context-fit` exits with status 2 when any selected task does not pass. Human and JSON output include token totals, included/excluded candidates, deficit, warnings, errors, and rule-based remediation. It never invokes runtime admission, Ollama, a task runner, retrieval, or automatic splitting.
+- `plan context-analysis list/show` inspect immutable compact analyses. `show` recomputes repository identity for staleness reporting; source content is not persisted by default.
 - `/context` reports bounded-history state; deterministic budget calculations remain a separate read-only inspection command and are not runtime enforcement.
 - Model profile creation inspects an already installed Ollama model and writes an uncalibrated conservative profile. It does not download or benchmark models.
 

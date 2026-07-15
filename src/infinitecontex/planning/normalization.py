@@ -133,7 +133,7 @@ def task_fingerprint_for_task(task: Task) -> str:
     context = task.context_requirements.model_dump(mode="json")
     for key, value in context.items():
         if isinstance(value, list):
-            context[key] = sorted(value)
+            context[key] = sorted(value, key=_canonical_collection_key)
     payload = {
         "task_key": task.task_key.casefold(),
         "title": normalize_text(task.title),
@@ -203,5 +203,9 @@ def _sorted_context(task: TaskInput) -> dict[str, Any]:
     payload = task.context_requirements.model_dump(mode="json")
     for key, value in payload.items():
         if isinstance(value, list):
-            payload[key] = sorted(value)
+            payload[key] = sorted(value, key=_canonical_collection_key)
     return payload
+
+
+def _canonical_collection_key(value: Any) -> bytes:
+    return orjson.dumps(value, option=orjson.OPT_SORT_KEYS)
