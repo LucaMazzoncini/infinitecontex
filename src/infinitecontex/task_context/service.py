@@ -138,9 +138,43 @@ class TaskContextService:
             if revision is None
             else self.plan_store.load_revision(plan_id, revision)
         )
+        return self.context_fit_revision(
+            plan,
+            repository_root,
+            model_name=model_name,
+            digest=digest,
+            task_ids=(task_id,) if task_id else None,
+            persist=persist,
+            additional_path_references=additional_path_references,
+            additional_symbol_references=additional_symbol_references,
+        )
+
+    def context_fit_revision(
+        self,
+        plan: PlanRevision,
+        repository_root: Path,
+        *,
+        model_name: str | None = None,
+        digest: str | None = None,
+        task_ids: tuple[str, ...] | None = None,
+        persist: bool = False,
+        additional_path_references: dict[str, Sequence[PathReference]] | None = None,
+        additional_symbol_references: dict[str, Sequence[SymbolReference]] | None = None,
+    ) -> tuple[TaskContextAnalysis, ...]:
+        """Fit selected tasks from an already validated, possibly transient revision."""
         profile = self._resolve_profile(plan, model_name, digest)
         inventory = self.inventory_service.build(repository_root)
-        selected = self._select_tasks(plan, task_id)
+        selected = (
+            tuple(sorted(plan.tasks, key=lambda item: item.task_id))
+            if task_ids is None
+            else tuple(
+                task
+                for task in sorted(plan.tasks, key=lambda item: item.task_id)
+                if task.task_id in set(task_ids)
+            )
+        )
+        if task_ids is not None and len(selected) != len(set(task_ids)):
+            raise ValueError("One or more selected tasks do not belong to the validated plan revision")
         packing = ContextPackingService(
             self.profile_store,
             self.calculator,
