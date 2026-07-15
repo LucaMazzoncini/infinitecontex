@@ -1,5 +1,15 @@
 # Current Repository Audit
 
+## G1 versioned tool registry and deterministic capability policies
+
+G1 adds a focused `tools/` package for immutable definitions, strict input/output schemas, SHA-256 identities, data-only registration, capability reuse, explicit effect/scope declarations, risk floors, predicted approval classes, deterministic policy decisions, compact persistence, and offline orchestration. The built-in registry contains conservative read, mutation, execution, Git, and restricted candidates; every entry is declared-only or unavailable and every `execution_handler` is null.
+
+The planning capability enum remains authoritative and now additively includes artifact writes, plan mutation, and task-status mutation. Task grants remain structurally empty. Repository scope checks reuse `task_context.scopes` normalization/matching. The CLI adds `tool list/show/registry`, `plan tool-check`, and `plan tool-decision list/show`. These paths construct no Ollama client, make no network request, load no plugin, execute no tool or shell command, grant no capability, approve nothing, and modify only optional `.infctx` decision records.
+
+Pre-change G1 baseline on 2026-07-15: Ruff format reported 149 files already formatted; Ruff lint passed; strict mypy passed for 105 source files; all 228 tests passed in 39.29 seconds with 91% total coverage; and `uv build` produced the sdist and wheel.
+
+Post-change G1 gates on 2026-07-15: Ruff format reported 164 files already formatted; Ruff lint passed; strict mypy passed for 118 source files; all 245 tests passed with 91% total coverage and 90% coverage for `cli.py`; `uv build` produced the sdist and wheel; and `git diff --check` passed. Dedicated tests additionally validate 1,000 definitions, 1,000 task/tool decisions, and compatibility with a 10,000-task plan without timing assertions.
+
 ## M3 F6 compact split proposal and approval CLI
 
 F6 exposes the existing `task_splitting/` services through additive `plan split`, `plan split-proposal list/show`, `plan approve-split`, `plan reject-split`, and `plan approval list/show` commands. The CLI constructs only the existing planning, task-context, profile-store, and split services; it does not construct Ollama, use network access, execute tasks, edit repository source, grant capabilities, or change a plan during proposal creation or inspection.

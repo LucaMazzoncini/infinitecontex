@@ -38,6 +38,11 @@ from infinitecontex.task_context.service import TaskContextService
 from infinitecontex.task_splitting.models import SplitApproval, SplitProposal
 from infinitecontex.task_splitting.service import TaskSplittingService
 from infinitecontex.task_splitting.store import TaskSplitStore
+from infinitecontex.tools.builtins import builtin_registry
+from infinitecontex.tools.capabilities import capability_from_name
+from infinitecontex.tools.models import ImplementationStatus, ToolCategory, ToolDefinition
+from infinitecontex.tools.service import ToolInspectionService
+from infinitecontex.tools.store import ToolDecisionStore
 from infinitecontex.version import __version__
 
 app = typer.Typer(help="Infinite Context: local-first project memory engine", invoke_without_command=True)
@@ -51,6 +56,8 @@ plan_app = typer.Typer(help="Validate and inspect strict persisted task DAGs")
 context_analysis_app = typer.Typer(help="Inspect persisted task-context analyses")
 split_proposal_app = typer.Typer(help="List and inspect deterministic split proposals")
 approval_app = typer.Typer(help="List and inspect explicit split decisions")
+tool_app = typer.Typer(help="Inspect the versioned data-only tool registry")
+tool_decision_app = typer.Typer(help="List and inspect persisted tool-policy decisions")
 ESTIMATE_TEXT_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 CONTEXT_CANDIDATE_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 model_app.add_typer(profile_app, name="profile")
@@ -60,9 +67,11 @@ context_app.add_typer(manifest_app, name="manifest")
 context_app.add_typer(admission_app, name="admission")
 app.add_typer(context_app, name="context")
 app.add_typer(plan_app, name="plan")
+app.add_typer(tool_app, name="tool")
 plan_app.add_typer(context_analysis_app, name="context-analysis")
 plan_app.add_typer(split_proposal_app, name="split-proposal")
 plan_app.add_typer(approval_app, name="approval")
+plan_app.add_typer(tool_decision_app, name="tool-decision")
 console = Console()
 _global_project_root: Path | None = None
 
@@ -166,6 +175,163 @@ def _task_splitting_service(project_root: Path | None) -> TaskSplittingService:
         _task_context_service(root),
         TaskSplitStore(layout.plans),
     )
+
+
+def _tool_inspection_service(project_root: Path | None) -> ToolInspectionService:
+    from infinitecontex.planning.store import PlanStore
+    from infinitecontex.task_context.repository import RepositoryInventoryService
+    from infinitecontex.task_context.store import TaskContextAnalysisStore
+
+    root = _effective_project_root(project_root)
+    layout = build_layout(root)
+    return ToolInspectionService(
+        PlanStore(layout.plans),
+        TaskContextAnalysisStore(layout.plans),
+        ToolDecisionStore(layout.plans),
+        inventory_service=RepositoryInventoryService(),
+        profile_store=ModelProfileStore(layout.model_profiles),
+        split_store=TaskSplitStore(layout.plans),
+        registry=builtin_registry(),
+    )
+
+
+@tool_app.command("list")
+def tool_list(
+    category: Annotated[str | None, typer.Option("--category")] = None,
+    capability: Annotated[str | None, typer.Option("--capability")] = None,
+    status: Annotated[str | None, typer.Option("--status")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List stable tool definitions without loading or executing handlers."""
+    registry = builtin_registry()
+
+    def action() -> list[dict[str, object]]:
+        limit = load_app_config(_effective_project_root(None)).tools.display_limit
+        selected = registry.list(
+            category=ToolCategory(category) if category else None,
+            capability=capability_from_name(capability) if capability else None,
+            implementation_status=ImplementationStatus(status) if status else None,
+        )
+        return [
+            {
+                "tool_id": item.tool_id,
+                "canonical_name": item.canonical_name,
+                "version": item.tool_version,
+                "category": item.category.value,
+                "implementation_status": item.implementation_status.value,
+                "risk": item.derived_risk.value,
+                "approval_class": item.approval_class.value,
+                "required_capabilities": [value.value for value in item.required_capabilities],
+                "executable_now": False,
+            }
+            for item in selected[:limit]
+        ]
+
+    _run_action(action, as_json=json, format_type="tools")
+
+
+@tool_app.command("show")
+def tool_show(
+    tool_id: str,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show one complete data-only definition."""
+    definition = _run_action(lambda: builtin_registry().get(tool_id), emit=False)
+    assert isinstance(definition, ToolDefinition)
+    payload = definition.model_dump(mode="json")
+    payload["executable_now"] = False
+    _emit(payload, json, "tool_definition")
+
+
+@tool_app.command("registry")
+def tool_registry(
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Export the deterministic built-in registry."""
+    _emit(builtin_registry().export().model_dump(mode="json"), json, "tool_registry")
+
+
+@plan_app.command("tool-check")
+def plan_tool_check(
+    plan_id: str,
+    task: Annotated[str, typer.Option("--task")],
+    tool: Annotated[str | None, typer.Option("--tool")] = None,
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    repo: Annotated[Path | None, typer.Option("--repo")] = None,
+    persist: Annotated[bool | None, typer.Option("--persist/--no-persist")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Evaluate structural eligibility; execution remains unavailable."""
+    root = _effective_project_root(project_root)
+    service = _tool_inspection_service(root)
+    persist_decisions = load_app_config(root).tools.persist_decisions if persist is None else persist
+    decisions = cast(
+        tuple[object, ...],
+        _run_action(
+            lambda: service.check(
+                plan_id,
+                task,
+                (repo or root).resolve(),
+                tool_id=tool,
+                revision=revision,
+                persist=persist_decisions,
+            ),
+            emit=False,
+        ),
+    )
+    payload = [item.model_dump(mode="json") for item in decisions if hasattr(item, "model_dump")]
+    _emit(payload[0] if tool and payload else payload, json, "tool_decision" if tool else "tool_decisions")
+
+
+@tool_decision_app.command("list")
+def tool_decision_list(
+    plan_id: str,
+    task: Annotated[str | None, typer.Option("--task")] = None,
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    repo: Annotated[Path | None, typer.Option("--repo")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List persisted decisions with current staleness state."""
+    root = _effective_project_root(project_root)
+    service = _tool_inspection_service(root)
+
+    def action() -> list[dict[str, object]]:
+        values = service.decision_store.list(plan_id, revision=revision, task_id=task)
+        limit = load_app_config(root).tools.display_limit
+        return [
+            {
+                **item.model_dump(mode="json"),
+                "staleness": service.staleness(item, (repo or root).resolve()).model_dump(mode="json"),
+            }
+            for item in values[:limit]
+        ]
+
+    _run_action(action, as_json=json, format_type="tool_decisions")
+
+
+@tool_decision_app.command("show")
+def tool_decision_show(
+    plan_id: str,
+    decision_id: str,
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    repo: Annotated[Path | None, typer.Option("--repo")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show one persisted decision and whether it is stale."""
+    root = _effective_project_root(project_root)
+    service = _tool_inspection_service(root)
+
+    def action() -> dict[str, object]:
+        value = service.decision_store.load(plan_id, decision_id, revision=revision)
+        return {
+            **value.model_dump(mode="json"),
+            "staleness": service.staleness(value, (repo or root).resolve()).model_dump(mode="json"),
+        }
+
+    _run_action(action, as_json=json, format_type="tool_decision")
 
 
 @plan_app.command("validate")
@@ -1383,6 +1549,59 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                 "graph_fingerprint": (revision.get("graph_fingerprint", "") if isinstance(revision, dict) else ""),
             }
             console.print(_format_dict(summary, "Approved Split Application"))
+        elif format_type == "tool_definition":
+            effects = payload.get("effects", {})
+            active_effects = [name for name, enabled in effects.items() if enabled] if isinstance(effects, dict) else []
+            summary = {
+                "Execution available now": "NO",
+                "tool_id": payload.get("tool_id", ""),
+                "name_version": f"{payload.get('canonical_name', '')}@{payload.get('tool_version', '')}",
+                "category": payload.get("category", ""),
+                "implementation_status": payload.get("implementation_status", ""),
+                "availability": payload.get("availability", ""),
+                "risk": payload.get("derived_risk", ""),
+                "effects": active_effects,
+                "required_capabilities": payload.get("required_capabilities", []),
+                "scope_semantics": [
+                    item.get("kind", "") for item in payload.get("scopes", []) if isinstance(item, dict)
+                ],
+                "approval_class": payload.get("approval_class", ""),
+            }
+            console.print(_format_dict(summary, "Tool Definition"))
+        elif format_type == "tool_registry":
+            summary = {
+                "Execution available now": "NO",
+                "schema_version": payload.get("schema_version", ""),
+                "registry_fingerprint": payload.get("registry_fingerprint", ""),
+                "tool_count": payload.get("tool_count", 0),
+                "handlers_loaded": "NO",
+            }
+            console.print(_format_dict(summary, "Data-only Tool Registry"))
+        elif format_type == "tool_decision":
+            staleness = payload.get("staleness", {})
+            summary = {
+                "Execution available now": "NO",
+                "decision_id": payload.get("decision_id", ""),
+                "task": payload.get("task_id", ""),
+                "tool": payload.get("tool_id", ""),
+                "decision": payload.get("decision", ""),
+                "structurally_eligible": payload.get("structurally_eligible", False),
+                "requested_capabilities": payload.get("requested_capabilities", []),
+                "required_capabilities": payload.get("required_capabilities", []),
+                "missing_capabilities": payload.get("missing_requested_capabilities", []),
+                "scope_result": [
+                    f"{item.get('kind')}: {'pass' if item.get('passed') else 'deny'} ({item.get('reason_code')})"
+                    for item in payload.get("scope_checks", [])
+                    if isinstance(item, dict)
+                ],
+                "context_fit": payload.get("context_fit_state", ""),
+                "risk": payload.get("risk_level", ""),
+                "approval_requirement": payload.get("approval_class", ""),
+                "reasons": payload.get("reason_codes", []),
+                "remediation": payload.get("remediation", []),
+                "stale": staleness.get("stale", "") if isinstance(staleness, dict) else "",
+            }
+            console.print(_format_dict(summary, "Offline Tool Policy Decision"))
         elif format_type == "ingest_chat":
             summary = {
                 "developer_goal": payload.get("developer_goal", ""),
@@ -1695,6 +1914,31 @@ def _emit(payload: object, as_json: bool, format_type: str = "generic") -> None:
                         str(item.get("applied_revision") or ""),
                     )
                 console.print(Panel(table, title="[bold]Split Decisions[/bold]", expand=False))
+        elif format_type == "tools":
+            table = Table(show_header=True, header_style="bold cyan")
+            table.add_column("Tool")
+            table.add_column("Name")
+            table.add_column("Category")
+            table.add_column("Status")
+            table.add_column("Risk")
+            table.add_column("Approval")
+            table.add_column("Executable now")
+            for item in payload:
+                table.add_row(
+                    str(item.get("tool_id", "")),
+                    f"{item.get('canonical_name', '')}@{item.get('version', '')}",
+                    str(item.get("category", "")),
+                    str(item.get("implementation_status", "")),
+                    str(item.get("risk", "")),
+                    str(item.get("approval_class", "")),
+                    "NO",
+                )
+            console.print("[bold red]Execution available now: NO[/bold red]")
+            console.print(Panel(table, title="[bold]Data-only Tool Registry[/bold]", expand=False))
+        elif format_type == "tool_decisions":
+            console.print("[bold red]Execution available now: NO[/bold red]")
+            for item in payload:
+                _emit(item, False, "tool_decision")
         else:
             for item in payload:
                 console.print(item)

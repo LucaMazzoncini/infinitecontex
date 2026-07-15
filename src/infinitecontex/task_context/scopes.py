@@ -18,6 +18,31 @@ from infinitecontex.task_context.policy import RepositoryResolutionPolicy
 _ROOT_WIDE = {"*", "**", "**/*", ".", "./"}
 
 
+def normalize_repository_scope(value: str) -> tuple[str | None, str | None]:
+    """Normalize a repository-relative scope using the task-context safety contract."""
+    if not value or not value.strip():
+        return None, "scope cannot be empty"
+    if any(ord(character) == 0 or ord(character) < 32 for character in value):
+        return None, "scope contains a null or control character"
+    raw = value.strip()
+    normalized = _normalize_scope(raw)
+    if raw.startswith(("\\\\?\\", "\\\\.\\", "//?/", "//./")):
+        return None, "Windows device paths are not allowed"
+    if raw.startswith(("\\\\", "//", "/")) or ":/" in normalized:
+        return None, "absolute, UNC, and network scopes are not allowed"
+    if any(part == ".." for part in normalized.split("/")):
+        return None, "scope traversal is not allowed"
+    if normalized in {"", "."}:
+        return None, "repository-root scope is unresolved"
+    return normalized, None
+
+
+def repository_scope_contains(scope: str, path: str, policy: RepositoryResolutionPolicy | None = None) -> bool:
+    """Return whether one normalized path is covered by a normalized scope."""
+    active = policy or RepositoryResolutionPolicy()
+    return _path_within_scope(path, scope, active)
+
+
 def validate_task_scopes(
     task: Task,
     inventory: RepositoryInventory,

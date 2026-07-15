@@ -38,6 +38,12 @@ Structured workflow:
 - `infctx plan reject-split PLAN_ID PROPOSAL_ID --actor TEXT [--reason TEXT] [--project-root PATH] [--json]`
 - `infctx plan approval list PLAN_ID [--project-root PATH] [--json]`
 - `infctx plan approval show PLAN_ID APPROVAL_ID [--project-root PATH] [--json]`
+- `infctx tool list [--category CATEGORY] [--capability CAPABILITY] [--status STATUS] [--json]`
+- `infctx tool show TOOL_ID [--json]`
+- `infctx tool registry [--json]`
+- `infctx plan tool-check PLAN_ID --task TASK_ID [--tool TOOL_ID] [--revision N] [--repo PATH] [--persist/--no-persist] [--project-root PATH] [--json]`
+- `infctx plan tool-decision list PLAN_ID [--task TASK_ID] [--revision N] [--repo PATH] [--project-root PATH] [--json]`
+- `infctx plan tool-decision show PLAN_ID DECISION_ID [--revision N] [--repo PATH] [--project-root PATH] [--json]`
 - `infctx context manifest list [--project-root PATH] [--json]`
 - `infctx context manifest show MANIFEST_ID [--project-root PATH] [--json]`
 - `infctx init [--project-root PATH] [--json]`
@@ -86,6 +92,9 @@ Notes:
 - `plan split` calls only the deterministic bounded splitter. It requires an exact task, model, and digest, persists an immutable proposal, prints a compact source-free review by default, and returns the complete proposal with `--json`. Identical regeneration is idempotent. Proposal creation, listing, and showing never revise a plan or record approval.
 - `plan approve-split` is the only split command that can apply a proposal. It requires an explicit nonblank human actor and optionally records a reason. Proposals with warnings additionally require `--acknowledge-warnings`. Before creating exactly the next revision it revalidates proposal integrity, current revision and graph, source task, repository snapshot, profile/digest, source and leaf analyses, complete contract coverage, every leaf fit, and final DAG validity. Any mismatch fails closed with a regeneration instruction.
 - `plan reject-split` records an immutable rejection without revising the plan. A proposal accepts only one decision; duplicate approval or rejection attempts fail. `plan approval list/show` are inspection only.
+- `tool list/show/registry` inspect the versioned built-in data registry. Definitions contain strict schemas, effects, capabilities, scopes, risk, and predicted approval requirements, but never a handler. Registration and export are deterministic and do not load plugins.
+- `plan tool-check` evaluates one task against one or every registered definition, optionally persists compact decisions, and never executes or approves a tool. Human output leads with `Execution available now: NO`; JSON contains complete reason and scope records. Task capability requests remain requests and the granted-capability list is always empty.
+- `plan tool-decision list/show` report current staleness without deleting or reusing old records. Plan, task, repository, analysis, profile, definition, registry, policy, or risk-rule changes make the linked record stale.
 - `/context` reports bounded-history state; deterministic budget calculations remain a separate read-only inspection command and are not runtime enforcement.
 - Model profile creation inspects an already installed Ollama model and writes an uncalibrated conservative profile. It does not download or benchmark models.
 

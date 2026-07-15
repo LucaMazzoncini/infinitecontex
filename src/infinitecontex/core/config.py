@@ -34,6 +34,13 @@ class ContextBudgetConfig(BaseModel):
     warning_threshold_basis_points: int = Field(default=8750, ge=1, le=10000)
 
 
+class ToolsConfig(BaseModel):
+    registry_version: int = Field(default=1, ge=1, le=1)
+    policy_version: int = Field(default=1, ge=1, le=1)
+    persist_decisions: bool = True
+    display_limit: int = Field(default=100, ge=1, le=1000)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -67,6 +74,7 @@ class AppConfig(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     chat: ChatConfig = Field(default_factory=ChatConfig)
     context_budget: ContextBudgetConfig = Field(default_factory=ContextBudgetConfig)
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
 
 @dataclass(frozen=True)

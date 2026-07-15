@@ -1,5 +1,15 @@
 # Config Reference
 
+## Tool inspection
+
+The additive `tools` section selects only supported built-in schema/policy version 1, whether `plan tool-check` persists decisions by default, and a bounded display limit:
+
+```json
+{"tools": {"registry_version": 1, "policy_version": 1, "persist_decisions": true, "display_limit": 100}}
+```
+
+These settings cannot change effects, capability mappings, risk floors, permanent restrictions, grants, approvals, or execution availability.
+
 Merge precedence, highest first:
 
 1. Environment overrides

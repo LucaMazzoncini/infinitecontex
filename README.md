@@ -192,6 +192,17 @@ infctx plan approve-split PLAN_ID PROPOSAL_ID --actor "User" --reason "Reviewed"
 
 Creating, listing, or showing a proposal never changes the plan. Approval revalidates the exact revision, graph, source task, repository snapshot, profile/digest, source and leaf context analyses, contract coverage, and final DAG before it creates exactly the next immutable revision. Rejection records the human decision without applying anything.
 
+The future tool surface can be inspected and checked against a persisted task entirely offline:
+
+~~~powershell
+infctx tool list
+infctx tool show TOOL_ID
+infctx plan tool-check PLAN_ID --task TASK_ID --tool TOOL_ID
+infctx plan tool-decision show PLAN_ID DECISION_ID
+~~~
+
+Definitions are versioned data with strict schemas, explicit effects/capabilities/scopes, derived risk, and predicted approval requirements. The result distinguishes structural eligibility from permission and always prints `Execution available now: NO`. G1 loads no handlers, grants no capability, performs no tool operation, and makes no plan or source change.
+
 | Command | Purpose |
 | --- | --- |
 | `infctx init` | Create `.infctx/` and initialize local metadata |
@@ -222,6 +233,9 @@ Creating, listing, or showing a proposal never changes the plan. Approval revali
 | `infctx plan split-proposal` | List or show complete proposal records |
 | `infctx plan approve-split` / `reject-split` | Record an explicit human decision; approval applies one verified revision |
 | `infctx plan approval` | List or show immutable split decisions |
+| `infctx tool list` / `show` / `registry` | Inspect deterministic data-only tool definitions and registry identity |
+| `infctx plan tool-check` | Evaluate future task/tool structural eligibility; never execute or grant |
+| `infctx plan tool-decision` | List/show compact stale-aware policy records |
 
 Global options:
 
@@ -251,6 +265,7 @@ Infinite Context keeps generated files inside `.infctx/`:
     PLAN_ID/analyses/REVISION/task-context/
     PLAN_ID/splits/proposals/
     PLAN_ID/splits/approvals/
+    PLAN_ID/tool-decisions/REVISION/TASK_ID/
   snapshots/
   working_set/
 ```
@@ -283,7 +298,7 @@ uv build
 
 Current local QC:
 
-- `228` tests passing
+- `245` tests passing
 - `91%` total coverage
 - `90%` coverage for `src/infinitecontex/cli.py`
 - `uv build` produces the wheel and source archive

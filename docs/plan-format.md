@@ -85,6 +85,17 @@ infctx plan ready PLAN_ID
 
 These commands never execute tasks or grant requested capabilities.
 
+## Tool capability requests and offline policy
+
+`requested_capabilities` uses the single planning vocabulary: repository read, Git inspection, tests, builds, source/test/documentation/artifact writes, command execution, network, plan mutation, task-status mutation, commit, push, and human approval. `granted_capabilities` remains empty in G1. A requested capability is not a grant, a tool requirement does not grant it, and structural eligibility is not execution permission.
+
+~~~powershell
+infctx tool list --capability read_repository
+infctx plan tool-check PLAN_ID --task TASK_ID --tool TOOL_ID --json
+~~~
+
+Policy checks use the exact immutable revision and task fingerprint. Repository-dependent tools also require a current passing task-context analysis. Future writes must fit the task's affected scopes and must not overlap forbidden scopes. All G1 decisions report `executable_now: false`.
+
 ## Structured task context
 
 `context_requirements` accepts legacy string lists and typed `path_references` and `symbol_references`. Only explicit declarations become repository candidates.
