@@ -31,6 +31,7 @@ from infinitecontex.llm.ollama import OllamaClient
 from infinitecontex.model_profiles.models import ModelProfile
 from infinitecontex.model_profiles.service import ModelProfileService
 from infinitecontex.model_profiles.store import ModelProfileStore
+from infinitecontex.mutation_cli import plan_mutation_app, repo_patch_app, tool_mutation_app
 from infinitecontex.planning.models import PlanInput, PlanRevision, PlanValidationReport
 from infinitecontex.planning.service import PlanningService
 from infinitecontex.service import InfiniteContextService
@@ -82,6 +83,9 @@ plan_app.add_typer(split_proposal_app, name="split-proposal")
 plan_app.add_typer(approval_app, name="approval")
 plan_app.add_typer(tool_decision_app, name="tool-decision")
 tool_app.add_typer(tool_execution_app, name="execution")
+repo_app.add_typer(repo_patch_app, name="patch")
+plan_app.add_typer(plan_mutation_app, name="mutation")
+tool_app.add_typer(tool_mutation_app, name="mutation")
 console = Console()
 _global_project_root: Path | None = None
 

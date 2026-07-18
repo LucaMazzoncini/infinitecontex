@@ -216,6 +216,7 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             effects=ToolEffects(writes_repository_files=True),
             scopes=write_scope,
             inputs=write_input,
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "repository.write-test",
@@ -225,6 +226,7 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             effects=ToolEffects(writes_repository_files=True),
             scopes=test_scope,
             inputs=test_input,
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "repository.write-documentation",
@@ -234,6 +236,7 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             effects=ToolEffects(writes_repository_files=True),
             scopes=docs_scope,
             inputs=docs_input,
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "task.update-infctx-state",

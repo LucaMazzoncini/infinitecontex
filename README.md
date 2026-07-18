@@ -336,3 +336,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history. The `0.3.1` release adds t
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Approved transactional text mutations (G3)
+
+G3 adds task-bound structured UTF-8 mutations without enabling shell, Git, network, model, or autonomous execution. Use `infctx repo patch validate`, then `infctx plan mutation propose`, inspect the deterministic diff, record an exact `approve` or `reject` decision, and run `infctx plan mutation apply`. Proposal and approval never edit source; only apply can change approved targets, with exact hashes and verified rollback. See `docs/tool-mutations.md`.

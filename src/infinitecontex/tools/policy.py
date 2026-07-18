@@ -48,6 +48,7 @@ class ToolPolicy:
         analysis_stale: bool = False,
         analysis_stale_reasons: tuple[str, ...] = (),
         plan_approved: bool = False,
+        authorization_workflow: bool = False,
     ) -> ToolPolicyDecision:
         validate_tool_definition(definition)
         requested = normalize_capabilities(task.requested_capabilities)
@@ -181,7 +182,7 @@ class ToolPolicy:
                     "Revise the plan explicitly; a tool check cannot grant capabilities.",
                 )
             )
-        failed_scopes = tuple(check for check in scopes if not check.passed)
+        failed_scopes = () if authorization_workflow else tuple(check for check in scopes if not check.passed)
         if failed_scopes:
             scope_decision = (
                 PolicyDecision.DENIED_FORBIDDEN_SCOPE
@@ -201,7 +202,7 @@ class ToolPolicy:
             for name, value in definition.effects
             if name not in {"read_only", "reads_repository", "requests_human_approval"}
         )
-        if mutation and not plan_approved:
+        if mutation and not plan_approved and not authorization_workflow:
             hard.append(
                 (
                     PolicyDecision.DENIED_UNAPPROVED_PLAN,
@@ -215,6 +216,7 @@ class ToolPolicy:
             if (
                 definition.implementation_status == ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION
                 and not definition.effects.read_only
+                and not authorization_workflow
             ):
                 hard.append(
                     (

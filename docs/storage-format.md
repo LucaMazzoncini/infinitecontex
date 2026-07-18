@@ -33,3 +33,5 @@ Tool decisions also use create-only sorted JSON. Their semantic fingerprint excl
 Tool execution records use create-only atomic sorted JSON and are never silently replaced or deleted. Unsupported schema versions, malformed JSON, invalid fingerprints, and conflicting immutable IDs fail closed. `tool execution list/show` are inspection-only.
 
 Export format: gzip tarball containing only `.infctx/`, allowing direct import on another machine.
+
+G3 adds `plans/<plan-id>/mutations/proposals/`, `plans/<plan-id>/mutations/approvals/`, and `tool-mutations/`. Proposal and approval files are immutable sorted JSON. Mutation execution records contain exact linkage, paths, hashes, counts, status, rollback state, and timestamps but no source contents or full diff. Existing `.infctx` state is preserved.

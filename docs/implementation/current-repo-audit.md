@@ -132,3 +132,11 @@ The M2 E1 request named `09_CONTEXT_BUDGET_ENGINE.md`, `13_OLLAMA_INTEGRATION.md
 ## M2 context-packing specification reconciliation
 
 The context-packing slice requested a local knowledge-graph specification, but the local specification tree contains no standalone knowledge-graph document. The authoritative guidance is distributed across `06_DOMAIN_MODEL.md`, `09_RETRIEVAL_AND_CONTEXT_PACKS.md`, and the existing `src/infinitecontex/graph/store.py`. The implementation consumes explicit candidates only and does not expand or duplicate the existing graph/retrieval engines.
+
+## G3 approved transactional text mutations
+
+G3 reuses G1 definitions/policy and G2 inventory, path resolution, hashing, sensitive filtering, snapshots, and atomic persistence. The local specification set has no separate task-execution or repository-scanning file; authoritative equivalents are roadmap/task planning, agent runtime, retrieval, security, ADR 0008, and the implemented `planning`, `task_context`, and `tools` packages.
+
+Only `repository.apply-source-patch`, `repository.write-test`, and `repository.write-documentation` gain mutation-workflow availability. Exact line-range replacement and new UTF-8 file creation are proposal-bound, human-approved, rollback-protected, and offline. Delete, rename, configuration, binary, shell, subprocess, Git, network, Ollama/LLM, chat approval, task transitions, and autonomous execution remain disabled.
+
+Final G3 gates on 2026-07-18: Ruff format reported 181 files formatted; Ruff lint passed; strict mypy passed for 132 source files; all 267 tests passed in 91.58 seconds with 91% coverage; `uv build` produced sdist and wheel; and `git diff --check` passed. Focused tests prove non-mutating proposal/approval, exact approved apply, stale/unapproved/protected denial, deterministic fingerprinting, 16-target bounds, rollback after a partial two-target apply, compact records, CLI/module workflows, and runtime subprocess/network isolation.

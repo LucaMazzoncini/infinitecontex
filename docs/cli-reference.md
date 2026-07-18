@@ -145,3 +145,12 @@ The file is either an array or an object with a `candidates` array. Inline conte
 - `cleanup` requires `--yes` when it will delete old snapshots.
 - `config --set-file` resolves relative preset paths against `--project-root` when provided.
 - For reliable intent capture, prefer `ingest-chat --file` over `ingest-chat --auto`.
+
+## G3 mutation workflow
+
+- `infctx repo patch validate --file FILE [--repo PATH] [--json]`
+- `infctx plan mutation propose PLAN_ID --task TASK_ID --file FILE [--revision N] [--repo PATH] [--project-root PATH] [--json]`
+- `infctx plan mutation list|show|approve|reject|apply ...`
+- `infctx tool mutation list|show ...`
+
+Validation is non-persisting. Proposal and decision persistence cannot modify repository targets. Apply is task-bound and requires the exact approved proposal. JSON exposes full structured operations; the human view leads with the bounded unified preview.
