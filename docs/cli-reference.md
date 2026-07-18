@@ -154,3 +154,8 @@ The file is either an array or an object with a `candidates` array. Inline conte
 - `infctx tool mutation list|show ...`
 
 Validation is non-persisting. Proposal and decision persistence cannot modify repository targets. Apply is task-bound and requires the exact approved proposal. JSON exposes full structured operations; the human view leads with the bounded unified preview.
+
+
+## G4 validation commands
+
+Use `validation command list|show`, `plan validation propose|list|show|approve|reject|run`, `tool validation list|show`, and `tool evidence list|show`. All accept `--json`; execution is task-bound and only `run` launches a process.

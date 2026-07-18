@@ -73,3 +73,8 @@ Example:
 ```
 
 G3 safety limits are versioned code policy rather than user-tunable coefficients: 16 targets, one structured operation per target, 2 MiB per file, 8 MiB aggregate preimage/postimage data, and 128 KiB diff preview. No configuration option can bypass scope, sensitive-path, hash, approval, or rollback checks.
+
+
+## G4 validation limits
+
+G4 security limits and its built-in command catalog are versioned code policy, not normal user-tunable configuration. Project files cannot add raw commands, interpolate environment variables, enable network, or downgrade admission.

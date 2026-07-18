@@ -1,4 +1,4 @@
-﻿# Current Repository Audit
+# Current Repository Audit
 
 ## G2 safe repository read and literal search execution
 
@@ -140,3 +140,8 @@ G3 reuses G1 definitions/policy and G2 inventory, path resolution, hashing, sens
 Only `repository.apply-source-patch`, `repository.write-test`, and `repository.write-documentation` gain mutation-workflow availability. Exact line-range replacement and new UTF-8 file creation are proposal-bound, human-approved, rollback-protected, and offline. Delete, rename, configuration, binary, shell, subprocess, Git, network, Ollama/LLM, chat approval, task transitions, and autonomous execution remain disabled.
 
 Final G3 gates on 2026-07-18: Ruff format reported 181 files formatted; Ruff lint passed; strict mypy passed for 132 source files; all 267 tests passed in 91.58 seconds with 91% coverage; `uv build` produced sdist and wheel; and `git diff --check` passed. Focused tests prove non-mutating proposal/approval, exact approved apply, stale/unapproved/protected denial, deterministic fingerprinting, 16-target bounds, rollback after a partial two-target apply, compact records, CLI/module workflows, and runtime subprocess/network isolation.
+
+
+## G4 repository audit update (2026-07-18)
+
+The Python extension now adds `validation_cli.py` and focused `tools/validation_*` modules. It reuses planning/context inventories, G1 registry policy, G3 immutable decision patterns, event logging and atomic JSON storage. The three narrow process tools are promoted; generic shell remains declared-only. Five offline profiles execute the current trusted Python interpreter with argument arrays. No existing command was removed or changed incompatibly.

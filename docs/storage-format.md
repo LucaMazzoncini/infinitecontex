@@ -35,3 +35,8 @@ Tool execution records use create-only atomic sorted JSON and are never silently
 Export format: gzip tarball containing only `.infctx/`, allowing direct import on another machine.
 
 G3 adds `plans/<plan-id>/mutations/proposals/`, `plans/<plan-id>/mutations/approvals/`, and `tool-mutations/`. Proposal and approval files are immutable sorted JSON. Mutation execution records contain exact linkage, paths, hashes, counts, status, rollback state, and timestamps but no source contents or full diff. Existing `.infctx` state is preserved.
+
+
+## G4 validation state
+
+Plan-scoped immutable proposals and decisions live under `plans/PLAN_ID/validations/`. Compact execution records live in `tool-validations/`; optional review-only evidence lives in `validation-evidence/`. The records store fingerprints, snapshots, bounded redacted previews and classifications, never raw environments, unlimited output, source contents, or secrets.

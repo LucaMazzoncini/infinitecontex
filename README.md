@@ -340,3 +340,8 @@ MIT. See [LICENSE](LICENSE).
 ## Approved transactional text mutations (G3)
 
 G3 adds task-bound structured UTF-8 mutations without enabling shell, Git, network, model, or autonomous execution. Use `infctx repo patch validate`, then `infctx plan mutation propose`, inspect the deterministic diff, record an exact `approve` or `reject` decision, and run `infctx plan mutation apply`. Proposal and approval never edit source; only apply can change approved targets, with exact hashes and verified rollback. See `docs/tool-mutations.md`.
+
+
+## Allowlisted validation commands (G4)
+
+G4 adds explicit task-bound validation proposals for trusted pytest, Ruff, mypy, and build profiles. Proposal and approval launch no process; only an exact approved `plan validation run` uses direct `shell=False` execution with a minimal environment, bounded/redacted output, timeout handling, repository mutation detection, compact records, and optional non-authoritative evidence. See `docs/tool-validation.md`.

@@ -50,6 +50,12 @@ from infinitecontex.tools.models import ImplementationStatus, ToolCategory, Tool
 from infinitecontex.tools.sensitive import SensitivePathPolicy
 from infinitecontex.tools.service import ToolInspectionService
 from infinitecontex.tools.store import ToolDecisionStore
+from infinitecontex.validation_cli import (
+    plan_validation_app,
+    tool_validation_app,
+    validation_app,
+    validation_evidence_app,
+)
 from infinitecontex.version import __version__
 
 app = typer.Typer(help="Infinite Context: local-first project memory engine", invoke_without_command=True)
@@ -86,6 +92,10 @@ tool_app.add_typer(tool_execution_app, name="execution")
 repo_app.add_typer(repo_patch_app, name="patch")
 plan_app.add_typer(plan_mutation_app, name="mutation")
 tool_app.add_typer(tool_mutation_app, name="mutation")
+app.add_typer(validation_app, name="validation")
+plan_app.add_typer(plan_validation_app, name="validation")
+tool_app.add_typer(tool_validation_app, name="validation")
+tool_app.add_typer(validation_evidence_app, name="evidence")
 console = Console()
 _global_project_root: Path | None = None
 

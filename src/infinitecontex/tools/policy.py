@@ -216,6 +216,12 @@ class ToolPolicy:
             if (
                 definition.implementation_status == ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION
                 and not definition.effects.read_only
+                and definition.canonical_name
+                not in {
+                    "execution.run-tests",
+                    "execution.run-build",
+                    "execution.run-static-analysis",
+                }
                 and not authorization_workflow
             ):
                 hard.append(

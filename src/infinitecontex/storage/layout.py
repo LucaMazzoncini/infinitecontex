@@ -29,6 +29,8 @@ class InfctxLayout:
     plans: Path
     tool_executions: Path
     tool_mutations: Path
+    tool_validations: Path
+    validation_evidence: Path
 
 
 def build_layout(project_root: Path) -> InfctxLayout:
@@ -53,6 +55,8 @@ def build_layout(project_root: Path) -> InfctxLayout:
         plans=base / "plans",
         tool_executions=base / "tool-executions",
         tool_mutations=base / "tool-mutations",
+        tool_validations=base / "tool-validations",
+        validation_evidence=base / "validation-evidence",
     )
 
 

@@ -260,6 +260,7 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             category=ToolCategory.TEST_EXECUTION,
             capabilities=(Capability.RUN_TESTS,),
             effects=process,
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "execution.run-build",
@@ -267,6 +268,7 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             category=ToolCategory.BUILD_EXECUTION,
             capabilities=(Capability.RUN_BUILD,),
             effects=process,
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "execution.run-static-analysis",
@@ -274,6 +276,7 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             category=ToolCategory.STATIC_ANALYSIS,
             capabilities=(Capability.EXECUTE_COMMANDS,),
             effects=process,
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "execution.run-bounded-shell",
