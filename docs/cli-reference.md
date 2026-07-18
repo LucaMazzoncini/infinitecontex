@@ -44,6 +44,12 @@ Structured workflow:
 - `infctx plan tool-check PLAN_ID --task TASK_ID [--tool TOOL_ID] [--revision N] [--repo PATH] [--persist/--no-persist] [--project-root PATH] [--json]`
 - `infctx plan tool-decision list PLAN_ID [--task TASK_ID] [--revision N] [--repo PATH] [--project-root PATH] [--json]`
 - `infctx plan tool-decision show PLAN_ID DECISION_ID [--revision N] [--repo PATH] [--project-root PATH] [--json]`
+- `infctx repo files [--glob GLOB] [--suffix SUFFIX] [--directory-prefix PATH] [--offset N] [--limit N] [--repo PATH] [--json]`
+- `infctx repo read PATH [--start-line N --end-line N] [--offset N] [--max-lines N] [--repo PATH] [--json]`
+- `infctx repo search QUERY [--glob GLOB] [--ignore-case] [--whole-word] [--max-matches N] [--max-files N] [--max-bytes N] [--context-lines N] [--offset N] [--repo PATH] [--json]`
+- `infctx plan tool-read PLAN_ID --task TASK_ID --path PATH [--revision N] [--start-line N --end-line N] [--repo PATH] [--json]`
+- `infctx tool execution list [--limit N] [--project-root PATH] [--json]`
+- `infctx tool execution show EXECUTION_ID [--project-root PATH] [--json]`
 - `infctx context manifest list [--project-root PATH] [--json]`
 - `infctx context manifest show MANIFEST_ID [--project-root PATH] [--json]`
 - `infctx init [--project-root PATH] [--json]`
@@ -95,6 +101,9 @@ Notes:
 - `tool list/show/registry` inspect the versioned built-in data registry. Definitions contain strict schemas, effects, capabilities, scopes, risk, and predicted approval requirements, but never a handler. Registration and export are deterministic and do not load plugins.
 - `plan tool-check` evaluates one task against one or every registered definition, optionally persists compact decisions, and never executes or approves a tool. Human output leads with `Execution available now: NO`; JSON contains complete reason and scope records. Task capability requests remain requests and the granted-capability list is always empty.
 - `plan tool-decision list/show` report current staleness without deleting or reusing old records. Plan, task, repository, analysis, profile, definition, registry, policy, or risk-rule changes make the linked record stale.
+- `repo files/read/search` execute only the five G2 read-only handlers through exact fingerprint binding and invocation-scoped snapshot grants. Reads are UTF-8/UTF-8-BOM and bounded; partial results include continuation. Search is literal only, deterministic, and bounded by matches, files, and bytes. Inventory exclusions, unsafe links, internal state, and sensitive paths fail closed.
+- `plan tool-read` is an explicitly requested task-bound read. It additionally requires the exact current revision/task, fresh passing context analysis, requested repository-read capability, passing structural policy, and a path within declared non-forbidden scopes. It creates no persistent grant.
+- `tool execution list/show` inspect compact records containing request/content hashes, linkage, counts, and safe status codes. Records never contain source, snippets, secrets, or full queries.
 - `/context` reports bounded-history state; deterministic budget calculations remain a separate read-only inspection command and are not runtime enforcement.
 - Model profile creation inspects an already installed Ollama model and writes an uncalibrated conservative profile. It does not download or benchmark models.
 

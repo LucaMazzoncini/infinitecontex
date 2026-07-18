@@ -212,7 +212,10 @@ class ToolPolicy:
             )
         if missing_granted:
             warnings.append("Required capabilities are not granted; G1 grants none.")
-            if definition.implementation_status == ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION:
+            if (
+                definition.implementation_status == ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION
+                and not definition.effects.read_only
+            ):
                 hard.append(
                     (
                         PolicyDecision.DENIED_CAPABILITY_NOT_GRANTED,

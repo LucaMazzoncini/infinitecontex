@@ -56,6 +56,18 @@ class RepositoryResolutionPolicy(BaseModel):
         "Builds/",
     )
     excluded_suffixes: tuple[str, ...] = (".pyc", ".pyo")
+    excluded_sensitive_names: tuple[str, ...] = (
+        ".env",
+        ".netrc",
+        ".npmrc",
+        ".pypirc",
+        "credentials.json",
+        "secrets.json",
+        "id_rsa",
+        "id_dsa",
+        "id_ecdsa",
+        "id_ed25519",
+    )
 
     def admission_policy(self) -> AdmissionPolicy:
         return AdmissionPolicy()

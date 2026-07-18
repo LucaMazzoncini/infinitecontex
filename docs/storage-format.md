@@ -22,11 +22,14 @@ Strict task-DAG plans are stored separately from legacy captured task strings un
 - `plans/<plan-id>/splits/proposals/split-proposal-<fingerprint>.json`: immutable deterministic proposal with source identities, compact context analyses, lineage, coverage, dependency rewrites, and the complete proposed plan. Full source content is not embedded.
 - `plans/<plan-id>/splits/approvals/split-approval-<fingerprint>.json`: immutable explicit human approval or rejection bound to the exact proposal fingerprint, actor, optional reason, snapshot/profile identities, and application result.
 - `plans/<plan-id>/tool-decisions/<revision>/<task-id>/tool-decision-<fingerprint>.json`: immutable compact G1 policy evaluation linked to exact plan/task/tool/registry/repository/analysis/policy/risk identities. It contains no source, secret, handler, command, or execution output.
+- `tool-executions/tool-execution-<fingerprint>.json`: immutable compact G2 execution record linked to the exact invocation, definition, registry, snapshot, and optional plan/task. It stores request/query hashes, counts, content hashes, safe codes, and timing, but never source content, snippets, secrets, or full queries.
 
 Task-context records use sorted deterministic JSON and do not duplicate full source by default. Malformed, unsupported-schema, fingerprint-mismatched, or pointer-mismatched data fails closed. Plan revisions are never changed by analysis persistence. Repository content, task, profile, estimator, ranking, packing, or resolution-policy changes make an older analysis stale; stale records remain inspectable and are not silently deleted.
 
 Split proposal and decision records use create-only persistence. Regenerating identical proposal semantics is idempotent; a conflicting record with the same ID fails. Listing, showing, exporting, or validating either record cannot create an approval. An applied approval points to exactly the next immutable revision; the plan store writes the revision create-only and atomically replaces `current.json` while preserving all historical revisions.
 
 Tool decisions also use create-only sorted JSON. Their semantic fingerprint excludes the timestamp. A plan revision, graph, task status/fingerprint/capability/scope, task-context analysis, repository snapshot, model profile, tool definition/version, registry fingerprint, policy version, or risk-derivation change makes an older decision stale. Stale decisions remain visible through list/show and cannot be treated as current authorization.
+
+Tool execution records use create-only atomic sorted JSON and are never silently replaced or deleted. Unsupported schema versions, malformed JSON, invalid fingerprints, and conflicting immutable IDs fail closed. `tool execution list/show` are inspection-only.
 
 Export format: gzip tarball containing only `.infctx/`, allowing direct import on another machine.

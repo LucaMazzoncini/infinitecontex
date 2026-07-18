@@ -117,10 +117,12 @@ class RepositoryInventoryService:
         policy: RepositoryResolutionPolicy | None = None,
         git_provider: GitStateProvider | None = None,
         clock: Callable[[], datetime] | None = None,
+        additional_path_filter: Callable[[str], bool] | None = None,
     ) -> None:
         self.policy = policy or RepositoryResolutionPolicy()
         self.git_provider = git_provider or SubprocessGitStateProvider()
         self.clock = clock or (lambda: datetime.now(UTC))
+        self.additional_path_filter = additional_path_filter or (lambda _path: True)
 
     def build(self, repository_root: Path) -> RepositoryInventory:
         root = self._validate_root(repository_root)
@@ -141,7 +143,7 @@ class RepositoryInventoryService:
         entries = tuple(
             self._entry(root, path, tracked, untracked, git)
             for path, tracked, untracked in ordered
-            if not self.is_policy_excluded(path)
+            if self.is_accessible_path(path)
         )
         return self.from_entries(root, entries, git, created_at=self.clock())
 
@@ -223,9 +225,17 @@ class RepositoryInventoryService:
             normalized = normalized[2:]
         segments = normalized.strip("/").split("/")
         excluded_names = {prefix.strip("/") for prefix in self.policy.excluded_prefixes}
-        return any(segment in excluded_names for segment in segments) or any(
-            normalized.endswith(suffix) for suffix in self.policy.excluded_suffixes
+        filename = segments[-1].casefold() if segments else ""
+        return (
+            any(segment in excluded_names for segment in segments)
+            or filename in self.policy.excluded_sensitive_names
+            or filename.startswith(".env.")
+            or any(normalized.endswith(suffix) for suffix in self.policy.excluded_suffixes)
         )
+
+    def is_accessible_path(self, path: str) -> bool:
+        """Apply established exclusions plus an injected pre-read security filter."""
+        return not self.is_policy_excluded(path) and self.additional_path_filter(path.replace("\\", "/"))
 
     def _entry(
         self,
@@ -298,12 +308,12 @@ class RepositoryInventoryService:
             kept: list[str] = []
             for name in sorted(directory_names):
                 relative = (base / name).relative_to(root).as_posix()
-                if not self.is_policy_excluded(relative) and not _is_reparse_or_symlink(base / name):
+                if self.is_accessible_path(relative) and not _is_reparse_or_symlink(base / name):
                     kept.append(name)
             directory_names[:] = kept
             for name in sorted(file_names):
                 relative = (base / name).relative_to(root).as_posix()
-                if not self.is_policy_excluded(relative):
+                if self.is_accessible_path(relative):
                     values.append(relative)
         return tuple(values)
 

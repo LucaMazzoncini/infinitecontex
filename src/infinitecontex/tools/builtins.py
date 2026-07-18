@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from infinitecontex.planning.models import Capability
+from infinitecontex.tools.execution_handlers import ReadHandlerRegistry
 from infinitecontex.tools.fingerprints import definition_fingerprint, generate_tool_id
 from infinitecontex.tools.models import (
     ApprovalClass,
@@ -120,6 +121,7 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             effects=repo_read,
             scopes=read_scope,
             inputs=read_input,
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "repository.read-source-range",
@@ -129,6 +131,7 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             effects=repo_read,
             scopes=range_scope,
             inputs=range_input,
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "git.inspect-status-diff",
@@ -174,6 +177,27 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
             capabilities=(Capability.READ_REPOSITORY,),
             effects=repo_read,
             scopes=(ToolScope(kind=ScopeKind.REPOSITORY_WIDE_READ, requires_resolved_task_context=True),),
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
+        ),
+        make_tool_definition(
+            "repository.search-paths",
+            display_name="Search repository paths",
+            category=ToolCategory.REPOSITORY_READ,
+            capabilities=(Capability.READ_REPOSITORY,),
+            effects=repo_read,
+            scopes=(ToolScope(kind=ScopeKind.REPOSITORY_WIDE_READ, requires_resolved_task_context=True),),
+            inputs=(_field("glob", PathFieldSemantics.REPOSITORY_RELATIVE),),
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
+        ),
+        make_tool_definition(
+            "repository.search-literal",
+            display_name="Search repository literal text",
+            category=ToolCategory.REPOSITORY_READ,
+            capabilities=(Capability.READ_REPOSITORY,),
+            effects=repo_read,
+            scopes=(ToolScope(kind=ScopeKind.REPOSITORY_WIDE_READ, requires_resolved_task_context=True),),
+            inputs=(_field("query"), _field("glob", PathFieldSemantics.REPOSITORY_RELATIVE)),
+            status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION,
         ),
         make_tool_definition(
             "repository.write-source",
@@ -360,3 +384,36 @@ def builtin_definitions() -> tuple[ToolDefinition, ...]:
 
 def builtin_registry() -> ToolRegistry:
     return ToolRegistry(builtin_definitions())
+
+
+def builtin_read_handler_registry(registry: ToolRegistry) -> ReadHandlerRegistry:
+    """Bind only the five G2 read handlers to exact validated definitions."""
+    from infinitecontex.tools.execution_handlers import (
+        HandlerBinding,
+        ReadHandlerRegistry,
+        list_files,
+        read_file,
+        search_literal,
+        search_paths,
+    )
+
+    rows = (
+        ("repository.list-inventory", "list_inventory_v1", list_files),
+        ("repository.read-file", "read_file_v1", read_file),
+        ("repository.read-source-range", "read_source_range_v1", read_file),
+        ("repository.search-paths", "search_paths_v1", search_paths),
+        ("repository.search-literal", "search_literal_v1", search_literal),
+    )
+    return ReadHandlerRegistry(
+        tuple(
+            HandlerBinding(
+                tool_id=definition.tool_id,
+                tool_version=definition.tool_version,
+                definition_fingerprint=definition.definition_fingerprint,
+                handler_name=handler_name,
+                handler=handler,
+            )
+            for canonical_name, handler_name, handler in rows
+            for definition in (registry.get_by_name_version(canonical_name, "1.0.0"),)
+        )
+    )

@@ -67,7 +67,7 @@ def validate_tool_definition(definition: ToolDefinition) -> ToolDefinition:
     if effects.pushes_remotely and Capability.PUSH_COMMITS not in capabilities:
         raise ContradictoryEffectsError("Push effects require the push_commits capability")
     if definition.execution_handler is not None:
-        raise MalformedToolDefinitionError("G1 tool definitions cannot contain execution handlers")
+        raise MalformedToolDefinitionError("Data-only tool definitions cannot contain execution handlers")
     if definition.implementation_status == ImplementationStatus.DECLARED_ONLY and definition.execution_handler:
         raise MalformedToolDefinitionError("Declared-only tools cannot claim handlers")
     if definition.replacement_tool_id == definition.tool_id:

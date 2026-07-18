@@ -1,4 +1,18 @@
-# Current Repository Audit
+﻿# Current Repository Audit
+
+## G2 safe repository read and literal search execution
+
+G2 adds immutable invocation, read-grant, result, and execution-record contracts; exact definition-to-handler bindings; centralized fail-closed admission; five bounded inventory/read/search handlers; sensitive-path policy; compact persistence; safe events; and direct-human plus task-bound orchestration under the existing `tools/` package. It reuses the M3 E2 inventory, path resolver, scope matching, hashing, binary detection, symlink/reparse checks, and file-size policy rather than creating another scanner.
+
+Only `repository.list-inventory`, `repository.read-file`, `repository.read-source-range`, `repository.search-paths`, and `repository.search-literal` have handlers. The CLI adds `repo files/read/search`, `plan tool-read`, and `tool execution list/show`. Literal queries are never regex. Every call has an invocation-scoped snapshot/tool/scope grant; task-bound reads additionally require exact fresh plan/task/context/policy/scope state. Records contain hashes and counts but no content, snippets, secrets, or full queries.
+
+The local authoritative equivalents are `docs/infinitecontext-next/11_AGENT_RUNTIME_AND_TOOLS.md` for tool execution, `09_RETRIEVAL_AND_CONTEXT_PACKS.md` plus ADR 0008 and `task_context/` for repository inventory and path resolution, `15_SECURITY_GIT_AND_APPROVALS.md` for guardrails, and `17_CLI_AND_API_CONTRACT.md`, `18_OBSERVABILITY_AND_DIAGNOSTICS.md`, `19_TEST_STRATEGY.md`, and `20_IMPLEMENTATION_ROADMAP.md` for CLI, observability, tests, and sequencing. The supplied specification set has no separate repository-scanning or path-resolution document, so the implemented M3 E2 components remain the code-level authority.
+
+Pre-change G2 baseline on 2026-07-16: Ruff format reported 164 files already formatted; Ruff lint passed; strict mypy passed for 118 source files; all 245 tests passed in 44.03 seconds with 91% total coverage; `uv build` and `git diff --check` passed.
+
+Post-change G2 gates on 2026-07-18: Ruff format reported 174 files already formatted; Ruff lint passed; strict mypy passed for 126 source files; all 260 tests passed in 89.09 seconds with 91% total coverage; `uv build` produced both distribution artifacts; and `git diff --check` passed. Focused tests cover exact bindings, rejected-dispatch isolation, direct and task-bound CLI paths, sensitive and stale denials, deterministic continuation, and bounded 10,000-file listing/search.
+
+Write, patch, shell, subprocess, Git mutation, network, dependency installation, model/Ollama, regex, semantic search, embeddings, and future-agent execution remain unavailable.
 
 ## G1 versioned tool registry and deterministic capability policies
 

@@ -27,6 +27,7 @@ class InfctxLayout:
     context_manifests: Path
     context_admissions: Path
     plans: Path
+    tool_executions: Path
 
 
 def build_layout(project_root: Path) -> InfctxLayout:
@@ -49,6 +50,7 @@ def build_layout(project_root: Path) -> InfctxLayout:
         context_manifests=base / "context-manifests",
         context_admissions=base / "context-admissions",
         plans=base / "plans",
+        tool_executions=base / "tool-executions",
     )
 
 

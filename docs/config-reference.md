@@ -8,7 +8,7 @@ The additive `tools` section selects only supported built-in schema/policy versi
 {"tools": {"registry_version": 1, "policy_version": 1, "persist_decisions": true, "display_limit": 100}}
 ```
 
-These settings cannot change effects, capability mappings, risk floors, permanent restrictions, grants, approvals, or execution availability.
+G2 read/search limits are explicit bounded invocation inputs: at most 1,000 returned lines, 10,000 matches, 10,000 files, and 64 MiB scanned. Configuration cannot change effects, capability mappings, risk floors, sensitive-path rules, permanent restrictions, grants, approvals, or which definitions have handlers.
 
 Merge precedence, highest first:
 

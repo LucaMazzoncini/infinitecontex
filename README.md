@@ -201,7 +201,18 @@ infctx plan tool-check PLAN_ID --task TASK_ID --tool TOOL_ID
 infctx plan tool-decision show PLAN_ID DECISION_ID
 ~~~
 
-Definitions are versioned data with strict schemas, explicit effects/capabilities/scopes, derived risk, and predicted approval requirements. The result distinguishes structural eligibility from permission and always prints `Execution available now: NO`. G1 loads no handlers, grants no capability, performs no tool operation, and makes no plan or source change.
+Definitions are versioned data with strict schemas, explicit effects/capabilities/scopes, derived risk, and predicted approval requirements. A G1 policy result still distinguishes structural eligibility from permission and prints `Execution available now: NO`.
+
+G2 adds an explicitly invoked, offline gateway for five repository reads only:
+
+~~~powershell
+infctx repo files --glob "src/**/*.py"
+infctx repo read src/infinitecontex/cli.py --start-line 1 --end-line 80
+infctx repo search "ContextAdmissionGate" --glob "src/**/*.py"
+infctx tool execution list
+~~~
+
+The gateway binds handlers to exact definition fingerprints, creates an invocation-scoped snapshot/path grant, and returns bounded content with explicit continuation. It reuses the validated repository inventory and path resolver, denies sensitive and internal paths, treats every search query literally, and persists only compact content-free records. Write, shell, Git mutation, network, model, and future-agent execution remain disabled.
 
 | Command | Purpose |
 | --- | --- |

@@ -359,7 +359,17 @@ def _glob_match(path: str, pattern: str) -> bool:
     if pattern.endswith("/**"):
         prefix = pattern[: -len("/**")].rstrip("/")
         return path == prefix or path.startswith(prefix + "/")
-    return fnmatch.fnmatchcase(path, pattern) or (pattern.startswith("**/") and fnmatch.fnmatchcase(path, pattern[3:]))
+    collapsed = pattern.replace("/**/", "/")
+    return (
+        fnmatch.fnmatchcase(path, pattern)
+        or (collapsed != pattern and fnmatch.fnmatchcase(path, collapsed))
+        or (pattern.startswith("**/") and fnmatch.fnmatchcase(path, pattern[3:]))
+    )
+
+
+def repository_glob_match(path: str, pattern: str) -> bool:
+    """Expose the repository resolver's deterministic glob semantics."""
+    return _glob_match(path, pattern)
 
 
 def _sha256(value: str) -> str:

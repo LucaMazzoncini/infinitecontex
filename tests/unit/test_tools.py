@@ -164,7 +164,7 @@ def test_registry_load_lookup_filter_duplicate_export_reverse_and_schema() -> No
     assert forward.get(sample.tool_id) == sample
     assert sample in forward.list(category=ToolCategory.FILE_READ)
     assert sample in forward.list(capability=Capability.READ_REPOSITORY)
-    assert sample in forward.list(implementation_status=ImplementationStatus.DECLARED_ONLY)
+    assert sample in forward.list(implementation_status=ImplementationStatus.AVAILABLE_FOR_FUTURE_EXECUTION)
     with pytest.raises(DuplicateToolIdentityError):
         forward.register(sample)
     with pytest.raises(UnsupportedRegistrySchemaError):

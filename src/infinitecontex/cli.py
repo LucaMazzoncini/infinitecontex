@@ -26,6 +26,7 @@ from infinitecontex.context_packing.service import ContextPackingService
 from infinitecontex.context_packing.store import ContextManifestStore
 from infinitecontex.core.config import AppConfig, load_app_config
 from infinitecontex.core.models import PromptMode
+from infinitecontex.events.logger import EventLogger
 from infinitecontex.llm.ollama import OllamaClient
 from infinitecontex.model_profiles.models import ModelProfile
 from infinitecontex.model_profiles.service import ModelProfileService
@@ -38,9 +39,14 @@ from infinitecontex.task_context.service import TaskContextService
 from infinitecontex.task_splitting.models import SplitApproval, SplitProposal
 from infinitecontex.task_splitting.service import TaskSplittingService
 from infinitecontex.task_splitting.store import TaskSplitStore
-from infinitecontex.tools.builtins import builtin_registry
+from infinitecontex.tools.builtins import builtin_read_handler_registry, builtin_registry
 from infinitecontex.tools.capabilities import capability_from_name
+from infinitecontex.tools.execution_gateway import ReadOnlyExecutionGateway
+from infinitecontex.tools.execution_models import ExecutionEnvelope, InvocationInput, OperationKind, ToolExecutionRecord
+from infinitecontex.tools.execution_service import RepositoryReadExecutionService
+from infinitecontex.tools.execution_store import ToolExecutionStore
 from infinitecontex.tools.models import ImplementationStatus, ToolCategory, ToolDefinition
+from infinitecontex.tools.sensitive import SensitivePathPolicy
 from infinitecontex.tools.service import ToolInspectionService
 from infinitecontex.tools.store import ToolDecisionStore
 from infinitecontex.version import __version__
@@ -58,6 +64,8 @@ split_proposal_app = typer.Typer(help="List and inspect deterministic split prop
 approval_app = typer.Typer(help="List and inspect explicit split decisions")
 tool_app = typer.Typer(help="Inspect the versioned data-only tool registry")
 tool_decision_app = typer.Typer(help="List and inspect persisted tool-policy decisions")
+repo_app = typer.Typer(help="Safely list, read, and literally search repository files")
+tool_execution_app = typer.Typer(help="Inspect compact read-only tool execution records")
 ESTIMATE_TEXT_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 CONTEXT_CANDIDATE_FILE_LIMIT_BYTES = 8 * 1024 * 1024
 model_app.add_typer(profile_app, name="profile")
@@ -68,10 +76,12 @@ context_app.add_typer(admission_app, name="admission")
 app.add_typer(context_app, name="context")
 app.add_typer(plan_app, name="plan")
 app.add_typer(tool_app, name="tool")
+app.add_typer(repo_app, name="repo")
 plan_app.add_typer(context_analysis_app, name="context-analysis")
 plan_app.add_typer(split_proposal_app, name="split-proposal")
 plan_app.add_typer(approval_app, name="approval")
 plan_app.add_typer(tool_decision_app, name="tool-decision")
+tool_app.add_typer(tool_execution_app, name="execution")
 console = Console()
 _global_project_root: Path | None = None
 
@@ -193,6 +203,232 @@ def _tool_inspection_service(project_root: Path | None) -> ToolInspectionService
         split_store=TaskSplitStore(layout.plans),
         registry=builtin_registry(),
     )
+
+
+def _repository_read_service(project_root: Path | None) -> RepositoryReadExecutionService:
+    from infinitecontex.planning.store import PlanStore
+    from infinitecontex.task_context.store import TaskContextAnalysisStore
+
+    root = _effective_project_root(project_root)
+    layout = build_layout(root)
+    registry = builtin_registry()
+    sensitive = SensitivePathPolicy()
+    gateway = ReadOnlyExecutionGateway(
+        registry,
+        builtin_read_handler_registry(registry),
+        ToolExecutionStore(layout.tool_executions),
+        event_logger=EventLogger(layout.events / "tool-executions.jsonl"),
+        sensitive_policy=sensitive,
+    )
+    return RepositoryReadExecutionService(
+        registry,
+        gateway,
+        plan_store=PlanStore(layout.plans),
+        analysis_store=TaskContextAnalysisStore(layout.plans),
+        sensitive_policy=sensitive,
+    )
+
+
+def _repo_root(repo: Path | None, project_root: Path | None) -> Path:
+    return (repo or _effective_project_root(project_root)).resolve()
+
+
+def _show_execution(envelope: ExecutionEnvelope, as_json: bool) -> None:
+    payload = envelope.model_dump(mode="json")
+    if as_json:
+        _emit(payload, True)
+        return
+    result = envelope.result
+    summary: dict[str, object] = {
+        "execution_id": envelope.record.execution_id,
+        "status": result.status.value,
+        "snapshot": result.repository_snapshot_fingerprint,
+        "path": result.normalized_path or "",
+        "files": len(result.files),
+        "matches": len(result.matches),
+        "bytes_scanned": result.bytes_scanned,
+        "has_more": result.has_more,
+        "continuation_offset": result.continuation_offset,
+        "next_range": result.next_range,
+        "message": result.message,
+    }
+    console.print(_format_dict(summary, "Safe Repository Read"))
+    if result.content is not None:
+        console.print(result.content, markup=False, soft_wrap=True)
+    for file_item in result.files:
+        console.print(f"{file_item.path}  {file_item.size_bytes} bytes  {file_item.classification}")
+    for match_item in result.matches:
+        console.print(
+            f"{match_item.path}:{match_item.line}:{match_item.column}: {match_item.snippet}",
+            markup=False,
+        )
+
+
+@repo_app.command("files")
+def repo_files(
+    glob: Annotated[str | None, typer.Option("--glob")] = None,
+    suffix: Annotated[str | None, typer.Option("--suffix")] = None,
+    directory_prefix: Annotated[str | None, typer.Option("--directory-prefix")] = None,
+    offset: Annotated[int, typer.Option("--offset", min=0)] = 0,
+    limit: Annotated[int, typer.Option("--limit", min=1, max=1000)] = 200,
+    repo: Annotated[Path | None, typer.Option("--repo")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List validated inventory entries without unrestricted traversal."""
+    root = _repo_root(repo, project_root)
+    operation = OperationKind.SEARCH_PATHS if glob or suffix or directory_prefix else OperationKind.LIST_FILES
+    tool_name = "repository.search-paths" if operation == OperationKind.SEARCH_PATHS else "repository.list-inventory"
+    envelope = _run_action(
+        lambda: _repository_read_service(root).execute_human(
+            root,
+            tool_name,
+            InvocationInput(
+                operation=operation,
+                glob=glob,
+                suffix=suffix,
+                directory_prefix=directory_prefix,
+                offset=offset,
+                limit=limit,
+            ),
+        ),
+        emit=False,
+    )
+    assert isinstance(envelope, ExecutionEnvelope)
+    _show_execution(envelope, json)
+
+
+@repo_app.command("read")
+def repo_read(
+    path: str,
+    start_line: Annotated[int | None, typer.Option("--start-line", min=1)] = None,
+    end_line: Annotated[int | None, typer.Option("--end-line", min=1)] = None,
+    offset: Annotated[int, typer.Option("--offset", min=0)] = 0,
+    max_lines: Annotated[int, typer.Option("--max-lines", min=1, max=1000)] = 200,
+    repo: Annotated[Path | None, typer.Option("--repo")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Read a bounded explicit UTF-8 repository file or line range."""
+    root = _repo_root(repo, project_root)
+    operation = OperationKind.READ_RANGE if start_line is not None else OperationKind.READ_FILE
+    tool_name = "repository.read-source-range" if operation == OperationKind.READ_RANGE else "repository.read-file"
+    envelope = _run_action(
+        lambda: _repository_read_service(root).execute_human(
+            root,
+            tool_name,
+            InvocationInput(
+                operation=operation,
+                path=path,
+                start_line=start_line,
+                end_line=end_line,
+                offset=offset,
+                limit=max_lines,
+            ),
+        ),
+        emit=False,
+    )
+    assert isinstance(envelope, ExecutionEnvelope)
+    _show_execution(envelope, json)
+
+
+@repo_app.command("search")
+def repo_search(
+    query: str,
+    glob: Annotated[str | None, typer.Option("--glob")] = None,
+    ignore_case: Annotated[bool, typer.Option("--ignore-case")] = False,
+    whole_word: Annotated[bool, typer.Option("--whole-word")] = False,
+    max_matches: Annotated[int, typer.Option("--max-matches", min=1, max=10_000)] = 100,
+    max_files: Annotated[int, typer.Option("--max-files", min=1, max=10_000)] = 1000,
+    max_bytes: Annotated[int, typer.Option("--max-bytes", min=1)] = 8 * 1024 * 1024,
+    context_lines: Annotated[int, typer.Option("--context-lines", min=0, max=10)] = 0,
+    offset: Annotated[int, typer.Option("--offset", min=0)] = 0,
+    repo: Annotated[Path | None, typer.Option("--repo")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Search repository text using literal matching only; regex is never interpreted."""
+    root = _repo_root(repo, project_root)
+    envelope = _run_action(
+        lambda: _repository_read_service(root).execute_human(
+            root,
+            "repository.search-literal",
+            InvocationInput(
+                operation=OperationKind.SEARCH_LITERAL,
+                query=query,
+                glob=glob,
+                ignore_case=ignore_case,
+                whole_word=whole_word,
+                maximum_matches=max_matches,
+                maximum_files=max_files,
+                maximum_bytes=max_bytes,
+                context_lines=context_lines,
+                offset=offset,
+            ),
+        ),
+        emit=False,
+    )
+    assert isinstance(envelope, ExecutionEnvelope)
+    _show_execution(envelope, json)
+
+
+@plan_app.command("tool-read")
+def plan_tool_read(
+    plan_id: str,
+    task: Annotated[str, typer.Option("--task")],
+    path: Annotated[str, typer.Option("--path")],
+    revision: Annotated[int | None, typer.Option("--revision", min=1)] = None,
+    start_line: Annotated[int | None, typer.Option("--start-line", min=1)] = None,
+    end_line: Annotated[int | None, typer.Option("--end-line", min=1)] = None,
+    repo: Annotated[Path | None, typer.Option("--repo")] = None,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Explicitly execute one task-bound read after exact policy and scope admission."""
+    root = _repo_root(repo, project_root)
+    operation = OperationKind.READ_RANGE if start_line is not None else OperationKind.READ_FILE
+    envelope = _run_action(
+        lambda: _repository_read_service(root).execute_task_read(
+            root,
+            plan_id,
+            task,
+            InvocationInput(
+                operation=operation,
+                path=path,
+                start_line=start_line,
+                end_line=end_line,
+            ),
+            revision=revision,
+        ),
+        emit=False,
+    )
+    assert isinstance(envelope, ExecutionEnvelope)
+    _show_execution(envelope, json)
+
+
+@tool_execution_app.command("list")
+def tool_execution_list(
+    limit: Annotated[int, typer.Option("--limit", min=1, max=1000)] = 100,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List compact content-free execution records."""
+    layout = build_layout(_effective_project_root(project_root))
+    values = ToolExecutionStore(layout.tool_executions).list(limit=limit)
+    _emit([item.model_dump(mode="json") for item in values], json)
+
+
+@tool_execution_app.command("show")
+def tool_execution_show(
+    execution_id: str,
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show one compact execution record; source and snippets are never stored."""
+    layout = build_layout(_effective_project_root(project_root))
+    value = _run_action(lambda: ToolExecutionStore(layout.tool_executions).load(execution_id), emit=False)
+    assert isinstance(value, ToolExecutionRecord)
+    _emit(value.model_dump(mode="json"), json)
 
 
 @tool_app.command("list")
