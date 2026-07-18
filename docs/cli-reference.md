@@ -159,3 +159,7 @@ Validation is non-persisting. Proposal and decision persistence cannot modify re
 ## G4 validation commands
 
 Use `validation command list|show`, `plan validation propose|list|show|approve|reject|run`, `tool validation list|show`, and `tool evidence list|show`. All accept `--json`; execution is task-bound and only `run` launches a process.
+
+## G5 evidence review
+
+Use `plan evidence review`, `plan evidence-review list|show|accept|reject`, and `plan evidence-review-decision list|show`. Review is offline and read-only with respect to source and plans; accept/reject persists only an immutable human decision. All commands support `--json` where applicable. Review acceptance is not criterion or task completion.

@@ -309,7 +309,7 @@ uv build
 
 Current local QC:
 
-- `245` tests passing
+- `281` tests passing
 - `91%` total coverage
 - `90%` coverage for `src/infinitecontex/cli.py`
 - `uv build` produces the wheel and source archive
@@ -345,3 +345,7 @@ G3 adds task-bound structured UTF-8 mutations without enabling shell, Git, netwo
 ## Allowlisted validation commands (G4)
 
 G4 adds explicit task-bound validation proposals for trusted pytest, Ruff, mypy, and build profiles. Proposal and approval launch no process; only an exact approved `plan validation run` uses direct `shell=False` execution with a minimal environment, bounded/redacted output, timeout handling, repository mutation detection, compact records, and optional non-authoritative evidence. See `docs/tool-validation.md`.
+
+## Deterministic evidence review (G5)
+
+G5 reviews typed G4 evidence against an exact task criterion without executing commands or changing plan state. `infctx plan evidence review` creates a deterministic, stale-aware review; `plan evidence-review accept|reject` records human judgment only. Review acceptance does not complete a criterion or task. See `docs/evidence-review.md`.

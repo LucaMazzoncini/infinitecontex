@@ -40,3 +40,7 @@ G3 adds `plans/<plan-id>/mutations/proposals/`, `plans/<plan-id>/mutations/appro
 ## G4 validation state
 
 Plan-scoped immutable proposals and decisions live under `plans/PLAN_ID/validations/`. Compact execution records live in `tool-validations/`; optional review-only evidence lives in `validation-evidence/`. The records store fingerprints, snapshots, bounded redacted previews and classifications, never raw environments, unlimited output, source contents, or secrets.
+
+## G5 evidence-review state
+
+Immutable reviews live at `plans/PLAN_ID/evidence-reviews/REVISION/TASK_ID/`; immutable human decisions live at `plans/PLAN_ID/evidence-review-decisions/`. Sorted atomic JSON stores exact plan/task/criterion/evidence provenance, contribution dispositions, outcome and confidence, but no raw output, source, secrets, or environment values. Fingerprints make policy, plan, task, criterion, or evidence changes stale and fail closed.

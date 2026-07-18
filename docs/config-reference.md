@@ -78,3 +78,7 @@ G3 safety limits are versioned code policy rather than user-tunable coefficients
 ## G4 validation limits
 
 G4 security limits and its built-in command catalog are versioned code policy, not normal user-tunable configuration. Project files cannot add raw commands, interpolate environment variables, enable network, or downgrade admission.
+
+## G5 review policy
+
+Evidence schema support, relevance mappings, freshness, aggregation, confidence, and the 1,000-record bound are versioned code policy. They are not low-level user configuration, and no trust-all or automatic-completion switch exists.

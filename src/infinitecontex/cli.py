@@ -27,6 +27,11 @@ from infinitecontex.context_packing.store import ContextManifestStore
 from infinitecontex.core.config import AppConfig, load_app_config
 from infinitecontex.core.models import PromptMode
 from infinitecontex.events.logger import EventLogger
+from infinitecontex.evidence_review_cli import (
+    plan_evidence_app,
+    plan_evidence_decision_app,
+    plan_evidence_review_app,
+)
 from infinitecontex.llm.ollama import OllamaClient
 from infinitecontex.model_profiles.models import ModelProfile
 from infinitecontex.model_profiles.service import ModelProfileService
@@ -94,6 +99,9 @@ plan_app.add_typer(plan_mutation_app, name="mutation")
 tool_app.add_typer(tool_mutation_app, name="mutation")
 app.add_typer(validation_app, name="validation")
 plan_app.add_typer(plan_validation_app, name="validation")
+plan_app.add_typer(plan_evidence_app, name="evidence")
+plan_app.add_typer(plan_evidence_review_app, name="evidence-review")
+plan_app.add_typer(plan_evidence_decision_app, name="evidence-review-decision")
 tool_app.add_typer(tool_validation_app, name="validation")
 tool_app.add_typer(validation_evidence_app, name="evidence")
 console = Console()

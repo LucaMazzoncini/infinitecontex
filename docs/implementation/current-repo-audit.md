@@ -145,3 +145,9 @@ Final G3 gates on 2026-07-18: Ruff format reported 181 files formatted; Ruff lin
 ## G4 repository audit update (2026-07-18)
 
 The Python extension now adds `validation_cli.py` and focused `tools/validation_*` modules. It reuses planning/context inventories, G1 registry policy, G3 immutable decision patterns, event logging and atomic JSON storage. The three narrow process tools are promoted; generic shell remains declared-only. Five offline profiles execute the current trusted Python interpreter with argument arrays. No existing command was removed or changed incompatibly.
+
+## G5 repository audit update (2026-07-19)
+
+The Python extension adds the focused `evidence_review/` package and `evidence_review_cli.py`. It reuses persisted plans, criterion/task fingerprints, G4 evidence/execution/proposal/approval records, command definitions, repository inventory snapshots, context-analysis identities, deterministic fingerprints, event logging, and atomic storage. Exact typed linkage replaces free-text interpretation. No existing command is removed; no command execution, source write, Git/network/Ollama/LLM operation, capability grant, criterion transition, or task transition is added.
+
+Final G5 gates on 2026-07-19: Ruff format reported 198 files formatted; Ruff lint passed; strict mypy passed for 146 source files; all 281 tests passed in 105.94 seconds with 91% coverage; uv build produced the sdist and wheel; and git diff --check passed. Focused offline tests cover passing, failing, stale, contaminated, duplicate, conflicting, missing, immutable human-decision, CLI human/JSON, unchanged plan state, and order-independent 1,000-evidence aggregation behavior.
