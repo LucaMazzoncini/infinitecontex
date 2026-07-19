@@ -50,7 +50,7 @@ class FakeRunner:
         )
 
 
-def _ready(tmp_path: Path, *, minimum: int = 1) -> tuple[Path, str, str, str]:
+def _ready(tmp_path: Path, *, minimum: int = 1, task_status: str = "ready") -> tuple[Path, str, str, str]:
     root = tmp_path / "repo"
     (root / "tests").mkdir(parents=True)
     (root / "tests/test_review.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
@@ -86,7 +86,7 @@ def _ready(tmp_path: Path, *, minimum: int = 1) -> tuple[Path, str, str, str]:
                         "title": "Review",
                         "objective": "Validate exact test evidence.",
                         "task_type": "validation",
-                        "status": "ready",
+                        "status": task_status,
                         "affected_scopes": ["tests/**"],
                         "forbidden_scopes": [],
                         "requested_capabilities": ["run_tests"],

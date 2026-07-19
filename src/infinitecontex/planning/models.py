@@ -13,7 +13,7 @@ PLANNING_POLICY_ID = "strict-task-dag-v1"
 MAX_TASKS = 10_000
 MAX_PLAN_FILE_BYTES = 8 * 1024 * 1024
 MAX_DEPENDENCIES = 64
-MAX_CRITERIA = 64
+MAX_CRITERIA = 1_000
 MAX_EVIDENCE = 64
 MAX_CONTEXT_REFERENCES = 256
 MAX_METADATA_KEYS = 64
@@ -89,6 +89,8 @@ class CriterionStatus(StrEnum):
     SATISFIED = "satisfied"
     FAILED = "failed"
     NOT_APPLICABLE = "not_applicable"
+    WAIVED = "waived"
+    SUPERSEDED = "superseded"
 
 
 class EvidenceType(StrEnum):

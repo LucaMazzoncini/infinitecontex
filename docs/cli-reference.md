@@ -163,3 +163,7 @@ Use `validation command list|show`, `plan validation propose|list|show|approve|r
 ## G5 evidence review
 
 Use `plan evidence review`, `plan evidence-review list|show|accept|reject`, and `plan evidence-review-decision list|show`. Review is offline and read-only with respect to source and plans; accept/reject persists only an immutable human decision. All commands support `--json` where applicable. Review acceptance is not criterion or task completion.
+
+## G6 plan-state transitions
+
+Use `plan transition propose|approve|reject|apply`, plus `plan transition-proposal`, `transition-approval`, and `transition-application` list/show. Proposal and decision commands never modify the plan. Only apply creates exactly the next immutable revision from an approved current proposal.

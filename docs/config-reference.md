@@ -82,3 +82,7 @@ G4 security limits and its built-in command catalog are versioned code policy, n
 ## G5 review policy
 
 Evidence schema support, relevance mappings, freshness, aggregation, confidence, and the 1,000-record bound are versioned code policy. They are not low-level user configuration, and no trust-all or automatic-completion switch exists.
+
+## G6 transition policy
+
+Criterion/task transition maps, accepted review outcomes, minimum confidence, waiver/reopening rules, human actor types, mandatory closure, and the 1,000-criterion transition bound are versioned code policy. There is no auto-complete or trust-all setting.

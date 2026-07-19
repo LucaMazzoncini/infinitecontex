@@ -145,3 +145,7 @@ infctx plan history PLAN_ID
 ~~~
 
 Rejection records a decision but leaves the source revision untouched. Capabilities requested by child tasks remain requests; splitting grants none.
+
+## G6 status evolution
+
+Criterion status remains backward compatible and now permits `waived` and `superseded` in addition to `pending`, `satisfied`, `failed`, and `not_applicable`. Up to 1,000 criteria per task are accepted for deterministic scale validation. Status changes are never inferred during import: G6 proposals enforce the versioned criterion policy, while task changes use the original authoritative task transition map.

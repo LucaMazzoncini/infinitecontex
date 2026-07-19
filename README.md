@@ -309,7 +309,7 @@ uv build
 
 Current local QC:
 
-- `281` tests passing
+- `286` tests passing
 - `91%` total coverage
 - `90%` coverage for `src/infinitecontex/cli.py`
 - `uv build` produces the wheel and source archive
@@ -349,3 +349,7 @@ G4 adds explicit task-bound validation proposals for trusted pytest, Ruff, mypy,
 ## Deterministic evidence review (G5)
 
 G5 reviews typed G4 evidence against an exact task criterion without executing commands or changing plan state. `infctx plan evidence review` creates a deterministic, stale-aware review; `plan evidence-review accept|reject` records human judgment only. Review acceptance does not complete a criterion or task. See `docs/evidence-review.md`.
+
+## Human-controlled plan state transitions (G6)
+
+G6 adds explicit `plan transition propose|approve|reject|apply` workflows. Accepted evidence reviews are inputs, not automatic state changes. Only apply creates one immutable plan revision; task execution, capabilities, source files, Git, network, and model access remain unchanged. See `docs/state-transitions.md`.

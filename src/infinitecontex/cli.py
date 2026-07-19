@@ -40,6 +40,12 @@ from infinitecontex.mutation_cli import plan_mutation_app, repo_patch_app, tool_
 from infinitecontex.planning.models import PlanInput, PlanRevision, PlanValidationReport
 from infinitecontex.planning.service import PlanningService
 from infinitecontex.service import InfiniteContextService
+from infinitecontex.state_transition_cli import (
+    plan_transition_app,
+    transition_application_app,
+    transition_approval_app,
+    transition_proposal_app,
+)
 from infinitecontex.storage.layout import build_layout
 from infinitecontex.task_context.service import TaskContextService
 from infinitecontex.task_splitting.models import SplitApproval, SplitProposal
@@ -102,6 +108,10 @@ plan_app.add_typer(plan_validation_app, name="validation")
 plan_app.add_typer(plan_evidence_app, name="evidence")
 plan_app.add_typer(plan_evidence_review_app, name="evidence-review")
 plan_app.add_typer(plan_evidence_decision_app, name="evidence-review-decision")
+plan_app.add_typer(plan_transition_app, name="transition")
+plan_app.add_typer(transition_proposal_app, name="transition-proposal")
+plan_app.add_typer(transition_approval_app, name="transition-approval")
+plan_app.add_typer(transition_application_app, name="transition-application")
 tool_app.add_typer(tool_validation_app, name="validation")
 tool_app.add_typer(validation_evidence_app, name="evidence")
 console = Console()

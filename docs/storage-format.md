@@ -44,3 +44,7 @@ Plan-scoped immutable proposals and decisions live under `plans/PLAN_ID/validati
 ## G5 evidence-review state
 
 Immutable reviews live at `plans/PLAN_ID/evidence-reviews/REVISION/TASK_ID/`; immutable human decisions live at `plans/PLAN_ID/evidence-review-decisions/`. Sorted atomic JSON stores exact plan/task/criterion/evidence provenance, contribution dispositions, outcome and confidence, but no raw output, source, secrets, or environment values. Fingerprints make policy, plan, task, criterion, or evidence changes stale and fail closed.
+
+## G6 transition state
+
+Create-only proposal, approval, and application JSON records live under `plans/PLAN_ID/state-transition-proposals/`, `state-transition-approvals/`, and `state-transition-applications/`. Records preserve source/result revision lineage, exact review-decision fingerprints, state changes and actors without raw evidence, output, source, environments, or secrets. The existing revision store remains authoritative.

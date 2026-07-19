@@ -34,3 +34,7 @@ The human output always states `Criterion status changed: NO` and `Task status c
 Reviews live under `.infctx/plans/PLAN_ID/evidence-reviews/REVISION/TASK_ID/`. Decisions live under `.infctx/plans/PLAN_ID/evidence-review-decisions/`. Records use atomic create-only sorted JSON and semantic fingerprints. Policy, plan, graph, task, criterion, or selected-evidence changes invalidate an older review. Raw output and secrets are not copied into review records.
 
 The built-in bound is 1,000 evidence records per review. Low-level policy coefficients are not user-configurable.
+
+## G6 consumption boundary
+
+An accepted G5 review can support a G6 transition proposal only after its exact review, human decision, evidence lineage, plan/task/criterion fingerprints, repository snapshot, outcome, and confidence are revalidated. Review acceptance still does not alter state; a separate approved G6 apply is required.
