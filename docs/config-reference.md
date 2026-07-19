@@ -86,3 +86,7 @@ Evidence schema support, relevance mappings, freshness, aggregation, confidence,
 ## G6 transition policy
 
 Criterion/task transition maps, accepted review outcomes, minimum confidence, waiver/reopening rules, human actor types, mandatory closure, and the 1,000-criterion transition bound are versioned code policy. There is no auto-complete or trust-all setting.
+
+## G7 execution authorization
+
+Grant coefficients are built-in hard bounds. Data-only authorization files may choose only finite values within those bounds; wildcard, unlimited, bypass, environment interpolation, and external include settings do not exist.

@@ -48,6 +48,12 @@ from infinitecontex.state_transition_cli import (
 )
 from infinitecontex.storage.layout import build_layout
 from infinitecontex.task_context.service import TaskContextService
+from infinitecontex.task_execution_cli import (
+    execution_app,
+    execution_authorization_app,
+    execution_grant_app,
+    execution_session_app,
+)
 from infinitecontex.task_splitting.models import SplitApproval, SplitProposal
 from infinitecontex.task_splitting.service import TaskSplittingService
 from infinitecontex.task_splitting.store import TaskSplitStore
@@ -112,6 +118,10 @@ plan_app.add_typer(plan_transition_app, name="transition")
 plan_app.add_typer(transition_proposal_app, name="transition-proposal")
 plan_app.add_typer(transition_approval_app, name="transition-approval")
 plan_app.add_typer(transition_application_app, name="transition-application")
+plan_app.add_typer(execution_app, name="execution")
+plan_app.add_typer(execution_authorization_app, name="execution-authorization")
+plan_app.add_typer(execution_grant_app, name="execution-grant")
+plan_app.add_typer(execution_session_app, name="execution-session")
 tool_app.add_typer(tool_validation_app, name="validation")
 tool_app.add_typer(validation_evidence_app, name="evidence")
 console = Console()

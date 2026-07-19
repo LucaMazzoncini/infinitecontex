@@ -19,3 +19,7 @@ Literal search never interprets regular-expression metacharacters. Optional case
 Task-bound reads use `infctx plan tool-read`. They additionally require the exact current revision and task fingerprint, fresh passing context analysis and snapshot, requested repository-read capability, passing G1 structural policy, and a path within declared scopes without forbidden overlap. They do not create persistent capability grants.
 
 Compact records in `.infctx/tool-executions/` contain hashes, counts, statuses, and linkage only. Source content, snippets, secrets, and full queries are never persisted.
+
+## G7 task-bound dispatch
+
+An activated G7 grant can dispatch the five existing G2 operations only through the G2 gateway. G3 and G4 dispatch requires the exact existing approved proposal. Tool definition fingerprints and scopes are frozen; G7 cannot widen them.

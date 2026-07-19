@@ -353,3 +353,7 @@ G5 reviews typed G4 evidence against an exact task criterion without executing c
 ## Human-controlled plan state transitions (G6)
 
 G6 adds explicit `plan transition propose|approve|reject|apply` workflows. Accepted evidence reviews are inputs, not automatic state changes. Only apply creates one immutable plan revision; task execution, capabilities, source files, Git, network, and model access remain unchanged. See `docs/state-transitions.md`.
+
+## Explicit task execution grants (G7)
+
+Task state and requested capabilities never grant execution. G7 adds an explicit proposal, human approval, activation, session, and one-action dispatch workflow for existing G2 reads, approved G3 mutations, and approved G4 validations. See `docs/task-execution.md`.

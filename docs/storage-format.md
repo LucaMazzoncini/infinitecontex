@@ -48,3 +48,7 @@ Immutable reviews live at `plans/PLAN_ID/evidence-reviews/REVISION/TASK_ID/`; im
 ## G6 transition state
 
 Create-only proposal, approval, and application JSON records live under `plans/PLAN_ID/state-transition-proposals/`, `state-transition-approvals/`, and `state-transition-applications/`. Records preserve source/result revision lineage, exact review-decision fingerprints, state changes and actors without raw evidence, output, source, environments, or secrets. The existing revision store remains authoritative.
+
+## G7 task execution records
+
+Per-plan additive directories `execution-authorization-proposals`, `execution-authorization-approvals`, `execution-grants`, `execution-grant-revocations`, and `execution-sessions` store sorted atomic JSON. Grant counters are mutable atomic state records; action journals are append-only and omit payload content.

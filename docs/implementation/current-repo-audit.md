@@ -157,3 +157,7 @@ Final G5 gates on 2026-07-19: Ruff format reported 198 files formatted; Ruff lin
 The extension adds `state_transitions/` and `state_transition_cli.py`, reusing G5 review records, the authoritative planning transition map, planning revision builder, DAG validation, fingerprints, event logging and atomic stores. Criterion statuses gain backward-compatible `waived` and `superseded`; the per-task criterion bound increases from 64 to 1,000 for required deterministic scale coverage. No plan mutation occurs before apply, and no task execution, capability grant, source/Git mutation, subprocess, network, Ollama, or LLM behavior is introduced.
 
 Final G6 gates on 2026-07-19: Ruff format reported 206 files formatted; Ruff lint passed; strict mypy passed for 153 source files; all 286 tests passed in 109.05 seconds with 90% coverage; uv build produced sdist and wheel; and git diff --check passed. Focused proofs cover non-mutating proposal/approval, accepted-review linkage, combined single-revision apply, historical immutability, rejected/unapproved/illegal/incomplete denial, idempotent repeat apply, CLI/module workflows, 1,000 actual criteria, and a 10,000-task transition preview with unchanged dependencies.
+
+## G7 audit update
+
+Added `infinitecontex.task_execution` plus `task_execution_cli`. It extends the existing PlanStore, task-context inventory, G1 registry, G2 gateway, G3 apply service, and G4 validation service. It adds no shell, network, Git, Ollama, plan-transition, or autonomous runtime path.

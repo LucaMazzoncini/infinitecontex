@@ -167,3 +167,7 @@ Use `plan evidence review`, `plan evidence-review list|show|accept|reject`, and 
 ## G6 plan-state transitions
 
 Use `plan transition propose|approve|reject|apply`, plus `plan transition-proposal`, `transition-approval`, and `transition-application` list/show. Proposal and decision commands never modify the plan. Only apply creates exactly the next immutable revision from an approved current proposal.
+
+## G7 task execution
+
+Use `plan execution authorize|approve|reject|activate|run`, `plan execution-authorization list|show`, `plan execution-grant list|show|revoke`, and `plan execution-session start|list|show|close`. Only `run` dispatches a tool.

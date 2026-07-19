@@ -149,3 +149,7 @@ Rejection records a decision but leaves the source revision untouched. Capabilit
 ## G6 status evolution
 
 Criterion status remains backward compatible and now permits `waived` and `superseded` in addition to `pending`, `satisfied`, `failed`, and `not_applicable`. Up to 1,000 criteria per task are accepted for deterministic scale validation. Status changes are never inferred during import: G6 proposals enforce the versioned criterion policy, while task changes use the original authoritative task transition map.
+
+## External G7 authorization records
+
+Execution grants are external records bound to an immutable plan revision and task fingerprint. They never populate `granted_capabilities` and never change task or criterion status.
