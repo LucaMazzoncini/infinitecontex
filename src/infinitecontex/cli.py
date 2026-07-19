@@ -1362,16 +1362,31 @@ def model_profile_show(
 @profile_app.command("create")
 def model_profile_create(
     model: Annotated[str, typer.Argument()],
+    expected_digest: Annotated[str | None, typer.Option("--expected-digest")] = None,
     project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
     json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Inspect an installed model and persist an uncalibrated conservative profile."""
+    """Inspect an installed model and persist an explicit digest-bound conservative profile."""
     service = _model_profile_service(project_root)
-    result = _run_action(lambda: service.create_or_reuse(model), emit=False)
+    result = _run_action(
+        lambda: service.create_exact(model, expected_digest) if expected_digest else service.create_or_reuse(model),
+        emit=False,
+    )
     profile, created = cast(tuple[ModelProfile, bool], result)
     payload = profile.model_dump(mode="json")
     payload["created"] = created
     _emit(payload, json, "model_profile")
+
+
+@profile_app.command("verify")
+def model_profile_verify(
+    profile_id: Annotated[str, typer.Argument()],
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Verify exact persisted identity and budgets without generating text."""
+    service = _model_profile_service(project_root)
+    _emit(_run_action(lambda: service.verify_exact(profile_id), emit=False), json, "model_profile")
 
 
 @app.command()

@@ -361,3 +361,7 @@ Task state and requested capabilities never grant execution. G7 adds an explicit
 ## Supervised local agent (G8)
 
 G8 adds an explicit, bounded supervised_local_agent caller. It requires an exact G7 grant and session, an exact installed ModelProfile digest, and an explicit infctx plan agent run. Read/search requests still pass through G7 and G2. Mutation output stops as an unapproved G3-compatible candidate. See docs/agent-runtime.md.
+
+## Exact supervised model admission (G9)
+
+Supervised execution uses an explicit digest-bound Ollama profile; auto and alias fallback are rejected. Every model call persists a context manifest, a fail-closed admission decision, and compact call evidence before generation. Requested, effective, and transmitted sampling values are auditable.

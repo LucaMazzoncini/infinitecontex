@@ -104,6 +104,9 @@ class AgentStep(StrictModel):
     step_id: str
     step_number: int
     prompt_fingerprint: str
+    model_call_id: str | None = None
+    context_manifest_id: str | None = None
+    context_admission_id: str | None = None
     estimated_input_tokens: int
     reserved_output_tokens: int
     model_name: str

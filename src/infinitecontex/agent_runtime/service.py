@@ -6,6 +6,7 @@ from pathlib import Path
 from time import monotonic
 from typing import Protocol
 
+from infinitecontex.agent_runtime.evidence import ModelCallEvidence
 from infinitecontex.agent_runtime.models import (
     AgentRun,
     AgentStep,
@@ -19,7 +20,11 @@ from infinitecontex.agent_runtime.models import (
 from infinitecontex.agent_runtime.prompt import build_prompt
 from infinitecontex.agent_runtime.protocol import parse_response
 from infinitecontex.agent_runtime.store import AgentRunStore
-from infinitecontex.llm.models import ChatMessage
+from infinitecontex.context_admission.gate import ContextAdmissionGate
+from infinitecontex.context_admission.models import AdmissionRequest, AdmissionSection, AdmissionSectionKind
+from infinitecontex.context_packing.models import CandidateCategory, ContextCandidate
+from infinitecontex.context_packing.service import ContextPackingService
+from infinitecontex.llm.models import ChatMessage, OllamaSampling
 from infinitecontex.model_profiles.store import ModelProfileStore
 from infinitecontex.planning.store import PlanStore
 from infinitecontex.task_execution.models import ActionKind, ActionRequest, CallerType, GrantState
@@ -31,7 +36,7 @@ from infinitecontex.tools.validation_definitions import ValidationCommandRegistr
 
 class ModelAdapter(Protocol):
     def installed_identity(self, model: str) -> str: ...
-    def generate(self, model: str, prompt: str) -> tuple[str, int | None, int | None]: ...
+    def generate(self, model: str, prompt: str, sampling: OllamaSampling) -> tuple[str, int | None, int | None]: ...
 
 
 class OllamaModelAdapter:
@@ -45,8 +50,9 @@ class OllamaModelAdapter:
             raise ValueError("exact configured Ollama model is not installed")
         return str(match.digest)
 
-    def generate(self, model: str, prompt: str) -> tuple[str, int | None, int | None]:
-        chunks = list(self.client.stream_chat(model, [ChatMessage(role="system", content=prompt)]))  # type: ignore[attr-defined]
+    def generate(self, model: str, prompt: str, sampling: OllamaSampling) -> tuple[str, int | None, int | None]:
+        messages = [ChatMessage(role="system", content=prompt), ChatMessage(role="user", content="")]
+        chunks = list(self.client.stream_chat(model, messages, sampling))  # type: ignore[attr-defined]
         return (
             "".join(x.content for x in chunks),
             next((x.prompt_eval_count for x in reversed(chunks) if x.prompt_eval_count is not None), None),
@@ -62,10 +68,13 @@ class SupervisedAgentService:
         execution: TaskExecutionService,
         store: AgentRunStore,
         model: ModelAdapter,
+        packing: ContextPackingService,
+        admission: ContextAdmissionGate,
         *,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.plans, self.profiles, self.execution, self.store, self.model = plans, profiles, execution, store, model
+        self.packing, self.admission = packing, admission
         self.clock = clock or (lambda: datetime.now(UTC))
 
     def create(
@@ -144,13 +153,114 @@ class SupervisedAgentService:
             if state.state != GrantState.ACTIVE:
                 return self._state(run, RunState.GRANT_EXHAUSTED)
             prompt, prompt_fp = build_prompt(plan, task, grant, state, tuple(history))
-            estimated = (len(prompt.encode("utf-8")) + 3) // 4
             profile = self.profiles.find_by_id(run.model_profile_id)
-            if estimated + profile.reserved_output_tokens > profile.operational_context_tokens:
-                return self._state(run, RunState.BUDGET_EXHAUSTED)
             step_no = run.model_calls + 1
             began = self.clock()
-            raw, _, output_tokens = self.model.generate(run.model_name, prompt)
+            candidates = (
+                ContextCandidate(
+                    candidate_id=f"{run.run_id}-call-{step_no}-system",
+                    category=CandidateCategory.SYSTEM_INSTRUCTIONS,
+                    label="supervised agent prompt",
+                    content=prompt,
+                    mandatory=True,
+                ),
+                ContextCandidate(
+                    candidate_id=f"{run.run_id}-call-{step_no}-user",
+                    category=CandidateCategory.DIRECT_USER_REQUEST,
+                    label="empty transport user turn",
+                    content="",
+                    mandatory=True,
+                    direct_request_match=True,
+                ),
+            )
+            manifest = self.packing.pack(run.model_name, candidates, digest=run.model_digest, persist=True)
+            included = {item.candidate.candidate_id: item.candidate for item in manifest.included}
+            system_candidate, user_candidate = candidates
+            request = AdmissionRequest(
+                provider="ollama",
+                model_name=run.model_name,
+                normalized_model_name=profile.model_identity.normalized_model_name,
+                model_digest=run.model_digest,
+                profile_id=profile.profile_id,
+                manifest_id=manifest.manifest_id,
+                system_instructions=AdmissionSection(
+                    section_id=system_candidate.candidate_id,
+                    kind=AdmissionSectionKind.SYSTEM_INSTRUCTIONS,
+                    role="system",
+                    content=prompt,
+                    manifest_candidate_id=system_candidate.candidate_id,
+                    manifest_candidate_fingerprint=included[system_candidate.candidate_id].candidate_fingerprint,
+                ),
+                current_user_request=AdmissionSection(
+                    section_id=user_candidate.candidate_id,
+                    kind=AdmissionSectionKind.CURRENT_USER_REQUEST,
+                    role="user",
+                    content="",
+                    manifest_candidate_id=user_candidate.candidate_id,
+                    manifest_candidate_fingerprint=included[user_candidate.candidate_id].candidate_fingerprint,
+                ),
+                requested_output_tokens=profile.reserved_output_tokens,
+                requested_tool_result_tokens=profile.reserved_tool_result_tokens,
+                calculated_at=began,
+                correlation_id=f"{run.run_id}-call-{step_no}",
+            )
+            admitted = self.admission.admit(request)
+            if not admitted.result.admitted:
+                return self._state(run, RunState.BUDGET_EXHAUSTED)
+            sampling = OllamaSampling(
+                temperature=0.1,
+                top_p=0.9,
+                top_k=40,
+                seed=7,
+                repeat_penalty=1.1,
+                num_predict=profile.reserved_output_tokens,
+                num_ctx=profile.operational_context_tokens,
+            )
+            messages = [ChatMessage(role="system", content=prompt), ChatMessage(role="user", content="")]
+            envelope_payload = {
+                "model": run.model_name,
+                "messages": [item.model_dump() for item in messages],
+                "stream": True,
+                "options": sampling.transmitted(),
+            }
+            call_fp = sha256_payload({"run": run.run_id, "step": step_no, "manifest": manifest.manifest_fingerprint})
+            call_id = f"agent-call-{call_fp[:24]}"
+            evidence_payload = {
+                "call": call_id,
+                "manifest": manifest.manifest_fingerprint,
+                "admission": admitted.result.admission_id,
+                "request": sha256_payload(envelope_payload),
+            }
+            evidence = ModelCallEvidence(
+                call_id=call_id,
+                evidence_fingerprint=sha256_payload(evidence_payload),
+                run_id=run.run_id,
+                step_number=step_no,
+                session_id=run.session_id,
+                task_id=run.task_id,
+                grant_id=run.grant_id,
+                profile_id=profile.profile_id,
+                model_name=run.model_name,
+                model_digest=run.model_digest,
+                manifest_id=manifest.manifest_id,
+                manifest_fingerprint=manifest.manifest_fingerprint,
+                admission_id=admitted.result.admission_id,
+                admission_decision=admitted.result.decision.value,
+                final_prompt_hash=sha256_payload(prompt),
+                request_envelope_hash=sha256_payload(envelope_payload),
+                input_bytes=len(prompt.encode("utf-8")),
+                estimated_input_tokens=admitted.result.actual_estimated_input_tokens,
+                reserved_output_tokens=profile.reserved_output_tokens,
+                operational_context_tokens=profile.operational_context_tokens,
+                remaining_tokens=admitted.result.remaining_input_tokens,
+                requested_sampling=sampling.model_dump(mode="json"),
+                effective_sampling=sampling.model_dump(mode="json"),
+                transmitted_sampling=sampling.transmitted(),
+                created_at=began,
+            )
+            self.store.save_evidence(plan_id, run_id, evidence)
+            estimated = admitted.result.actual_estimated_input_tokens
+            raw, _, output_tokens = self.model.generate(run.model_name, prompt, sampling)
             errors: tuple[str, ...] = ()
             response = None
             try:
@@ -163,13 +273,14 @@ class SupervisedAgentService:
                 step_id=f"agent-step-{step_fingerprint[:24]}",
                 step_number=step_no,
                 prompt_fingerprint=prompt_fp,
+                model_call_id=call_id,
+                context_manifest_id=manifest.manifest_id,
+                context_admission_id=admitted.result.admission_id,
                 estimated_input_tokens=estimated,
                 reserved_output_tokens=profile.reserved_output_tokens,
                 model_name=run.model_name,
                 model_digest=run.model_digest,
-                generation_fingerprint=sha256_payload(
-                    {"temperature": 0.1, "seed": 7, "output": profile.reserved_output_tokens}
-                ),
+                generation_fingerprint=sha256_payload(sampling.transmitted()),
                 raw_response_hash=sha256_payload(raw),
                 response_kind=response.kind if response else None,
                 response_fingerprint=response_fp,

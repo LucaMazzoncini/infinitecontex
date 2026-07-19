@@ -165,3 +165,7 @@ Added `infinitecontex.task_execution` plus `task_execution_cli`. It extends the 
 ## G8 extension audit
 
 G8 adds agent_runtime as an orchestration layer over the existing ModelProfile/Ollama, G7 authorization, and G2 read services. It adds no replacement inventory, mutation engine, validation runner, plan transition, shell, network provider, or autonomous future-agent caller. The tracked scheduler benchmark generator writes only to an explicitly selected disposable location; benchmarks/supervised_agent/runs/ is ignored.
+
+## G9 extension audit
+
+G9 reuses ModelProfileService, ContextPackingService, ContextAdmissionGate, their atomic stores, and the Ollama streaming adapter. It adds explicit expected-digest verification, native Ollama sampling options, and per-call linkage evidence. No parallel context gate, provider fallback, shell, mutation apply, validation execution, or future-agent path was introduced.

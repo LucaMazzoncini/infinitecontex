@@ -10,6 +10,11 @@ from rich.console import Console
 from infinitecontex.agent_runtime.models import RuntimeBudgets
 from infinitecontex.agent_runtime.service import OllamaModelAdapter, SupervisedAgentService
 from infinitecontex.agent_runtime.store import AgentRunStore
+from infinitecontex.context_admission.gate import ContextAdmissionGate
+from infinitecontex.context_admission.store import AdmissionRecordStore
+from infinitecontex.context_budget.calculator import ContextBudgetCalculator
+from infinitecontex.context_packing.service import ContextPackingService
+from infinitecontex.context_packing.store import ContextManifestStore
 from infinitecontex.core.config import load_app_config
 from infinitecontex.llm.ollama import OllamaClient
 from infinitecontex.model_profiles.store import ModelProfileStore
@@ -34,6 +39,16 @@ def _service(root: Path) -> SupervisedAgentService:
         execution_service(root),
         AgentRunStore(layout.plans),
         OllamaModelAdapter(client),
+        ContextPackingService(
+            ModelProfileStore(layout.model_profiles),
+            ContextBudgetCalculator(),
+            manifest_store=ContextManifestStore(layout.context_manifests),
+        ),
+        ContextAdmissionGate(
+            ModelProfileStore(layout.model_profiles),
+            ContextManifestStore(layout.context_manifests),
+            AdmissionRecordStore(layout.context_admissions),
+        ),
     )
 
 
@@ -103,6 +118,17 @@ def steps(
     json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     values = _service(project_root.resolve()).store.list_steps(plan_id, run_id)
+    _emit([x.model_dump(mode="json") for x in values], json)
+
+
+@agent_step_app.command("evidence")
+def evidence(
+    plan_id: str,
+    run_id: str,
+    project_root: Annotated[Path, typer.Option("--project-root")] = Path("."),
+    json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    values = _service(project_root.resolve()).store.list_evidence(plan_id, run_id)
     _emit([x.model_dump(mode="json") for x in values], json)
 
 

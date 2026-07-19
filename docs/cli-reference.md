@@ -175,3 +175,7 @@ Use `plan execution authorize|approve|reject|activate|run`, `plan execution-auth
 ## Supervised agent commands
 
 infctx agent policy, infctx plan agent create/show/run, infctx plan agent-step list, and infctx plan agent-mutation show/export expose the G8 workflow. Only plan agent run invokes Ollama; export never approves or applies a mutation.
+
+## G9 exact profile and evidence
+
+model profile create accepts --expected-digest and model profile verify checks the installed tag/digest without generation. plan agent-step evidence lists the manifest, admission, request hash, budgets, and transmitted sampling for each call.

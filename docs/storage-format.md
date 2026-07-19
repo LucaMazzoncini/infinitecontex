@@ -56,3 +56,7 @@ Per-plan additive directories `execution-authorization-proposals`, `execution-au
 ## G8 agent runs
 
 Agent identity is stored at .infctx/plans/<plan-id>/agent-runs/<run-id>/run.json; compact append-only steps are under steps/, and an optional unapproved candidate is mutation-candidate.json. Records contain hashes and accounting, not chain-of-thought, secrets, or unrestricted tool output.
+
+## G9 model-call evidence
+
+Each supervised call adds one immutable JSON record under plans/<plan>/agent-runs/<run>/calls/. It links the authoritative global context-manifest and context-admission records to the run and step, with hashes, counts, exact model identity, budgets, and requested/effective/transmitted sampling; prompt and repository bodies are omitted.

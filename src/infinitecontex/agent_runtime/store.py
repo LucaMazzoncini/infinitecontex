@@ -8,6 +8,7 @@ from typing import TypeVar
 import orjson
 from pydantic import BaseModel
 
+from infinitecontex.agent_runtime.evidence import ModelCallEvidence
 from infinitecontex.agent_runtime.models import AgentRun, AgentStep, MutationCandidate
 
 T = TypeVar("T", bound=BaseModel)
@@ -52,6 +53,30 @@ class AgentRunStore:
         directory = self._dir(plan_id, run_id) / "steps"
         return (
             tuple(AgentStep.model_validate(orjson.loads(x.read_bytes())) for x in sorted(directory.glob("*.json")))
+            if directory.exists()
+            else ()
+        )
+
+    def save_evidence(self, plan_id: str, run_id: str, value: ModelCallEvidence) -> None:
+        path = self._dir(plan_id, run_id) / "calls" / f"{value.call_id}.json"
+        if path.exists():
+            existing = ModelCallEvidence.model_validate(orjson.loads(path.read_bytes()))
+            if existing != value:
+                raise ValueError("model-call evidence is immutable")
+            return
+        self._replace(path, value)
+
+    def load_evidence(self, plan_id: str, run_id: str, call_id: str) -> ModelCallEvidence:
+        return ModelCallEvidence.model_validate(
+            orjson.loads((self._dir(plan_id, run_id) / "calls" / f"{call_id}.json").read_bytes())
+        )
+
+    def list_evidence(self, plan_id: str, run_id: str) -> tuple[ModelCallEvidence, ...]:
+        directory = self._dir(plan_id, run_id) / "calls"
+        return (
+            tuple(
+                ModelCallEvidence.model_validate(orjson.loads(x.read_bytes())) for x in sorted(directory.glob("*.json"))
+            )
             if directory.exists()
             else ()
         )

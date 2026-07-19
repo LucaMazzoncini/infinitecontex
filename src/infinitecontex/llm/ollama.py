@@ -11,7 +11,14 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from infinitecontex.llm.errors import LLMConnectionError, LLMModelError, LLMResponseError, LLMTimeoutError
-from infinitecontex.llm.models import ChatChunk, ChatMessage, InstalledModel, ModelDetails, ProviderHealth
+from infinitecontex.llm.models import (
+    ChatChunk,
+    ChatMessage,
+    InstalledModel,
+    ModelDetails,
+    OllamaSampling,
+    ProviderHealth,
+)
 
 
 class OllamaClient:
@@ -49,12 +56,16 @@ class OllamaClient:
             model_info=cast(dict[str, Any], payload.get("model_info", {})),
         )
 
-    def stream_chat(self, model: str, messages: Sequence[ChatMessage]) -> Iterable[ChatChunk]:
+    def stream_chat(
+        self, model: str, messages: Sequence[ChatMessage], sampling: OllamaSampling | None = None
+    ) -> Iterable[ChatChunk]:
         body = {
             "model": model,
             "messages": [message.model_dump() for message in messages],
             "stream": True,
         }
+        if sampling is not None:
+            body["options"] = sampling.transmitted()
         response = self._open("POST", "/chat", body)
         try:
             for raw_line in response:

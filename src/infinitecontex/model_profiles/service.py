@@ -59,6 +59,41 @@ class ModelProfileService:
         )
         return identity, details
 
+    def create_exact(
+        self, model_name: str, expected_digest: str, provider: str = "ollama"
+    ) -> tuple[ModelProfile, bool]:
+        identity, _ = self.inspect_identity(model_name, provider)
+        if identity.model_name != model_name:
+            raise ModelProfileDigestMismatchError("Ollama alias substitution is not allowed for exact profile creation")
+        if identity.model_digest != expected_digest:
+            raise ModelProfileDigestMismatchError(
+                f"Installed digest {identity.model_digest!r} does not match expected digest {expected_digest!r}"
+            )
+        return self.create_or_reuse(model_name, provider)
+
+    def verify_exact(self, profile_id: str) -> dict[str, object]:
+        profile = self.store.find_by_id(profile_id)
+        identity, _ = self.inspect_identity(profile.model_identity.model_name, profile.model_identity.provider)
+        if (
+            identity.model_name != profile.model_identity.model_name
+            or identity.model_digest != profile.model_identity.model_digest
+        ):
+            raise ModelProfileDigestMismatchError("Installed model identity differs from the exact persisted profile")
+        if profile.model_identity.model_digest is None:
+            raise ModelProfileDigestMismatchError("Exact verification requires a digest-bound profile")
+        return {
+            "verified": True,
+            "profile_id": profile.profile_id,
+            "provider": profile.model_identity.provider,
+            "model_name": profile.model_identity.model_name,
+            "model_digest": profile.model_identity.model_digest,
+            "profile_fingerprint": hashlib.sha256(self.store.serialize(profile)).hexdigest(),
+            "operational_context_tokens": profile.operational_context_tokens,
+            "reserved_output_tokens": profile.reserved_output_tokens,
+            "sampling_contract": "ollama-options-v1",
+            "generation_invoked": False,
+        }
+
     def create_or_reuse(self, model_name: str, provider: str = "ollama") -> tuple[ModelProfile, bool]:
         identity, details = self.inspect_identity(model_name, provider)
         if identity.identity_strength == IdentityStrength.WEAK:
