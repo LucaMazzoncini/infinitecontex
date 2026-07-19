@@ -16,6 +16,7 @@ from rich.spinner import Spinner
 from rich.table import Table
 from watchfiles import Change, watch
 
+from infinitecontex.agent_runtime_cli import agent_app, agent_mutation_app, agent_step_app, plan_agent_app
 from infinitecontex.context_admission.gate import ContextAdmissionGate
 from infinitecontex.context_budget.calculator import ContextBudgetCalculator
 from infinitecontex.context_budget.estimation import ConservativeTextEstimator, Utf8ByteUpperBoundEstimator
@@ -101,6 +102,10 @@ app.add_typer(context_app, name="context")
 app.add_typer(plan_app, name="plan")
 app.add_typer(tool_app, name="tool")
 app.add_typer(repo_app, name="repo")
+app.add_typer(agent_app, name="agent")
+plan_app.add_typer(plan_agent_app, name="agent")
+plan_app.add_typer(agent_step_app, name="agent-step")
+plan_app.add_typer(agent_mutation_app, name="agent-mutation")
 plan_app.add_typer(context_analysis_app, name="context-analysis")
 plan_app.add_typer(split_proposal_app, name="split-proposal")
 plan_app.add_typer(approval_app, name="approval")

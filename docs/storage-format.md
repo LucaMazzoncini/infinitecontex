@@ -52,3 +52,7 @@ Create-only proposal, approval, and application JSON records live under `plans/P
 ## G7 task execution records
 
 Per-plan additive directories `execution-authorization-proposals`, `execution-authorization-approvals`, `execution-grants`, `execution-grant-revocations`, and `execution-sessions` store sorted atomic JSON. Grant counters are mutable atomic state records; action journals are append-only and omit payload content.
+
+## G8 agent runs
+
+Agent identity is stored at .infctx/plans/<plan-id>/agent-runs/<run-id>/run.json; compact append-only steps are under steps/, and an optional unapproved candidate is mutation-candidate.json. Records contain hashes and accounting, not chain-of-thought, secrets, or unrestricted tool output.

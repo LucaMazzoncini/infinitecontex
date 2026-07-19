@@ -136,6 +136,7 @@ class TaskExecutionService:
             repository_snapshot_fingerprint=snapshot,
             tools=tools,
             allowed_actions=tuple(sorted(specification.allowed_actions)),
+            allowed_callers=tuple(sorted(specification.allowed_callers)),
             read_scopes=specification.read_scopes,
             write_scopes=specification.write_scopes,
             permitted_mutation_proposals=tuple(sorted(specification.permitted_mutation_proposals)),
@@ -251,6 +252,7 @@ class TaskExecutionService:
             analysis_fingerprint=proposal.analysis_fingerprint,
             tools=proposal.tools,
             allowed_actions=proposal.allowed_actions,
+            allowed_callers=proposal.allowed_callers,
             read_scopes=proposal.read_scopes,
             write_scopes=proposal.write_scopes,
             permitted_mutation_proposals=proposal.permitted_mutation_proposals,
@@ -309,12 +311,18 @@ class TaskExecutionService:
         return session
 
     def run(self, root: Path, plan_id: str, session_id: str, request: ActionRequest) -> ActionJournalEntry:
+        entry, _ = self.run_with_result(root, plan_id, session_id, request)
+        return entry
+
+    def run_with_result(
+        self, root: Path, plan_id: str, session_id: str, request: ActionRequest
+    ) -> tuple[ActionJournalEntry, object | None]:
         existing = self.store.load_action(plan_id, session_id, request.action_request_id)
         fingerprint = self._action_fingerprint(request)
         if existing:
             if existing.action_fingerprint != fingerprint:
                 raise ActionRejected("Duplicate action ID has different semantic content")
-            return existing
+            return existing, None
         session = self.store.load_session(plan_id, session_id)
         grant = self.store.load_grant(plan_id, session.grant_id)
         self._admit(root, session, grant, request, fingerprint)
@@ -327,9 +335,9 @@ class TaskExecutionService:
             self.store.save_state(plan_id, reserved)
             try:
                 result, underlying_id, status, count, byte_count, snapshot_after = self._dispatch(root, grant, request)
-                del result
                 errors: tuple[str, ...] = ()
             except Exception as exc:
+                result = None
                 underlying_id, status, count, byte_count, snapshot_after = None, ActionStatus.FAILED, 0, 0, None
                 errors = (f"{type(exc).__name__}: {exc}",)
             if status == ActionStatus.MUTATION_APPLIED:
@@ -370,7 +378,7 @@ class TaskExecutionService:
                 }
             )
             self.store.save_session(updated)
-            return entry
+            return entry, result
         finally:
             lock.unlink(missing_ok=True)
 
@@ -531,8 +539,10 @@ class TaskExecutionService:
         self, root: Path, session: ExecutionSession, grant: ExecutionGrant, request: ActionRequest, fingerprint: str
     ) -> None:
         del fingerprint
-        if session.state != SessionState.ACTIVE or request.caller_type != request.caller_type.HUMAN_CLI:
-            raise ActionRejected("Only human_cli may dispatch through an active session")
+        if session.state != SessionState.ACTIVE or request.caller_type not in grant.allowed_callers:
+            raise ActionRejected("Caller is not explicitly authorized by this active grant")
+        if request.caller_type == request.caller_type.FUTURE_AGENT:
+            raise ActionRejected("future_agent remains disabled")
         if request.grant_id != grant.grant_id or request.grant_fingerprint != grant.grant_fingerprint:
             raise ActionRejected("Action grant identity does not match")
         if (request.plan_id, request.plan_revision, request.task_id, request.task_fingerprint) != (

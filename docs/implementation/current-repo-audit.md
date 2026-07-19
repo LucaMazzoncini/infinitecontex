@@ -161,3 +161,7 @@ Final G6 gates on 2026-07-19: Ruff format reported 206 files formatted; Ruff lin
 ## G7 audit update
 
 Added `infinitecontex.task_execution` plus `task_execution_cli`. It extends the existing PlanStore, task-context inventory, G1 registry, G2 gateway, G3 apply service, and G4 validation service. It adds no shell, network, Git, Ollama, plan-transition, or autonomous runtime path.
+
+## G8 extension audit
+
+G8 adds agent_runtime as an orchestration layer over the existing ModelProfile/Ollama, G7 authorization, and G2 read services. It adds no replacement inventory, mutation engine, validation runner, plan transition, shell, network provider, or autonomous future-agent caller. The tracked scheduler benchmark generator writes only to an explicitly selected disposable location; benchmarks/supervised_agent/runs/ is ignored.

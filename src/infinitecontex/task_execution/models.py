@@ -15,6 +15,7 @@ class StrictModel(BaseModel):
 
 class CallerType(StrEnum):
     HUMAN_CLI = "human_cli"
+    SUPERVISED_LOCAL_AGENT = "supervised_local_agent"
     FUTURE_AGENT = "future_agent"
     INTERNAL_SYSTEM = "internal_system"
 
@@ -83,6 +84,7 @@ class AuthorizationSpecification(StrictModel):
     repository_snapshot_policy: Literal["exact_until_change"] = "exact_until_change"
     continuation_policy: Literal["stop_on_failure", "explicit_continue"] = "stop_on_failure"
     requested_actor: str = Field(min_length=1, max_length=200)
+    allowed_callers: tuple[CallerType, ...] = (CallerType.HUMAN_CLI,)
     reason: str | None = Field(default=None, max_length=1000)
 
     @field_validator("allowed_tools", "read_scopes", "write_scopes", "forbidden_scopes", mode="after")
@@ -129,6 +131,7 @@ class AuthorizationProposal(StrictModel):
     repository_snapshot_fingerprint: str
     tools: tuple[ToolAuthorization, ...]
     allowed_actions: tuple[ActionKind, ...]
+    allowed_callers: tuple[CallerType, ...] = (CallerType.HUMAN_CLI,)
     read_scopes: tuple[str, ...]
     write_scopes: tuple[str, ...]
     permitted_mutation_proposals: tuple[str, ...]
@@ -185,6 +188,7 @@ class ExecutionGrant(StrictModel):
     analysis_fingerprint: str
     tools: tuple[ToolAuthorization, ...]
     allowed_actions: tuple[ActionKind, ...]
+    allowed_callers: tuple[CallerType, ...] = (CallerType.HUMAN_CLI,)
     read_scopes: tuple[str, ...]
     write_scopes: tuple[str, ...]
     permitted_mutation_proposals: tuple[str, ...]

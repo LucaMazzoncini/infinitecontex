@@ -171,3 +171,7 @@ Use `plan transition propose|approve|reject|apply`, plus `plan transition-propos
 ## G7 task execution
 
 Use `plan execution authorize|approve|reject|activate|run`, `plan execution-authorization list|show`, `plan execution-grant list|show|revoke`, and `plan execution-session start|list|show|close`. Only `run` dispatches a tool.
+
+## Supervised agent commands
+
+infctx agent policy, infctx plan agent create/show/run, infctx plan agent-step list, and infctx plan agent-mutation show/export expose the G8 workflow. Only plan agent run invokes Ollama; export never approves or applies a mutation.

@@ -23,3 +23,5 @@ build/
 *.log
 .DS_Store
 .vscode/settings.json
+
+benchmarks/supervised_agent/runs/

@@ -357,3 +357,7 @@ G6 adds explicit `plan transition propose|approve|reject|apply` workflows. Accep
 ## Explicit task execution grants (G7)
 
 Task state and requested capabilities never grant execution. G7 adds an explicit proposal, human approval, activation, session, and one-action dispatch workflow for existing G2 reads, approved G3 mutations, and approved G4 validations. See `docs/task-execution.md`.
+
+## Supervised local agent (G8)
+
+G8 adds an explicit, bounded supervised_local_agent caller. It requires an exact G7 grant and session, an exact installed ModelProfile digest, and an explicit infctx plan agent run. Read/search requests still pass through G7 and G2. Mutation output stops as an unapproved G3-compatible candidate. See docs/agent-runtime.md.
